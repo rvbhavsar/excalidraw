@@ -341,12 +341,20 @@ const initializeScene = async (opts: {
             ),
             // the drawing.title column is the source of truth for the name
             name: drawing.title,
+            // don't auto-reopen a sidebar just because the last session had one
+            openSidebar: null,
           },
         },
         isExternalScene: false,
       };
     } catch (error: any) {
       console.error(error);
+      // the drawing was deleted or isn't accessible — send the user to the
+      // dashboard instead of silently dropping them onto the local scene at "/"
+      if (CLERK_PUBLISHABLE_KEY) {
+        window.location.replace("/dashboard");
+        return { scene: { elements: [], appState: {} }, isExternalScene: false };
+      }
       window.history.replaceState({}, APP_NAME, window.location.origin);
     }
   }
