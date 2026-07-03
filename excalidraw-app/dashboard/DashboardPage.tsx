@@ -297,14 +297,6 @@ const DashboardShell = () => {
           <img className="aix-sidebar__logo" src={LOGO_LIGHT} alt="AIX Draw" />
         </div>
 
-        <div className="aix-workspace-switcher">
-          <OrganizationSwitcher
-            hidePersonal={false}
-            afterSelectOrganizationUrl="/dashboard"
-            afterSelectPersonalUrl="/dashboard"
-          />
-        </div>
-
         <nav className="aix-nav">
           <button className="aix-nav__item aix-nav__item--active">
             Dashboard
@@ -365,9 +357,18 @@ const DashboardShell = () => {
           ))}
         </div>
 
-        <div className="aix-sidebar__user">
-          <UserButton />
-          <span>{user?.fullName || user?.username || "Account"}</span>
+        <div className="aix-sidebar__bottom">
+          <div className="aix-sidebar__workspace">
+            <OrganizationSwitcher
+              hidePersonal={false}
+              afterSelectOrganizationUrl="/dashboard"
+              afterSelectPersonalUrl="/dashboard"
+            />
+          </div>
+          <div className="aix-sidebar__user">
+            <UserButton />
+            <span>{user?.fullName || user?.username || "Account"}</span>
+          </div>
         </div>
       </aside>
 

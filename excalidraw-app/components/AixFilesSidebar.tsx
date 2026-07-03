@@ -79,6 +79,12 @@ export const AixFilesSidebar: React.FC<{
         <Sidebar.Header>
           <span className="aix-files__heading">Your drawings</span>
         </Sidebar.Header>
+        <button
+          className="aix-files__dashboard"
+          onClick={() => window.location.assign("/dashboard")}
+        >
+          ← Dashboard
+        </button>
         <div className="aix-files__list">
           {drawings === null ? (
             <div className="aix-files__empty">Loading…</div>

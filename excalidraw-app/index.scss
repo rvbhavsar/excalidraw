@@ -134,6 +134,19 @@
   @media (max-width: 640px) {
     display: none;
   }
+
+  &--link {
+    display: flex;
+    align-items: center;
+    pointer-events: auto;
+    cursor: pointer;
+
+    img {
+      height: 1.75rem;
+      width: auto;
+      user-select: none;
+    }
+  }
 }
 
 .aix-sign-in-button {

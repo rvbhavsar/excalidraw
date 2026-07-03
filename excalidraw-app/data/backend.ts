@@ -17,12 +17,44 @@ export const currentDrawingIdAtom = atom<string | null>(null);
 declare global {
   interface Window {
     Clerk?: {
+      loaded?: boolean;
+      load?: () => Promise<unknown>;
       session?: { getToken: () => Promise<string | null> } | null;
     };
   }
 }
 
+const CLERK_ENABLED = !!import.meta.env.VITE_APP_CLERK_PUBLISHABLE_KEY;
+
+/** initializeScene() fires as soon as the canvas API is ready, which can be
+ * before clerk-js has attached `window.Clerk` and loaded the session. Without
+ * this wait, the first `getDrawing()` on a fresh `/d/:id` load goes out with no
+ * token, 401s, and the app falls back to the localStorage scene — so every
+ * board appears to open the same (last local) drawing. Bounded so an anonymous
+ * or Clerk-down load still resolves to null rather than hanging init. */
+const waitForClerk = async (): Promise<void> => {
+  if (!CLERK_ENABLED) {
+    return;
+  }
+  const start = Date.now();
+  while (Date.now() - start < 5000) {
+    if (window.Clerk?.loaded) {
+      return;
+    }
+    if (window.Clerk && !window.Clerk.loaded && window.Clerk.load) {
+      try {
+        await window.Clerk.load();
+        return;
+      } catch {
+        // fall through to polling
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
+
 export const getAuthToken = async (): Promise<string | null> => {
+  await waitForClerk();
   return (await window.Clerk?.session?.getToken()) ?? null;
 };
 
@@ -205,6 +237,9 @@ export const saveDrawing = async (
       app_state: appState,
       files,
       scene_version: sceneVersion,
+      // keep the dashboard's drawing.title in sync with the scene name that
+      // Excalidraw's built-in "Rename scene" edits (appState.name)
+      ...(appState.name ? { title: appState.name } : {}),
       ...(thumbnail ? { thumbnail } : {}),
     }),
   });

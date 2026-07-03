@@ -1,4 +1,8 @@
 $aix-orange: #ec7200;
+$ink: #1b1b1f;
+$muted: #8a8a94;
+$line: #ececf1;
+$hover: #f4f4f7;
 
 .aix-dashboard {
   display: flex;
@@ -6,26 +10,31 @@ $aix-orange: #ec7200;
   width: 100vw;
   overflow: hidden;
   font-family: "Figtree", "Assistant", system-ui, sans-serif;
-  color: #1b1b1f;
+  color: $ink;
   background: #fbfbfd;
 
   * {
     box-sizing: border-box;
   }
+
+  button {
+    font-family: inherit;
+    outline: none;
+  }
 }
 
 .aix-sidebar {
-  width: 248px;
+  width: 252px;
   flex-shrink: 0;
-  border-right: 1px solid #ececf1;
+  border-right: 1px solid $line;
   background: #ffffff;
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
-  gap: 14px;
+  padding: 18px 12px 12px;
+  gap: 18px;
 
   &__top {
-    padding: 4px 8px;
+    padding: 2px 8px;
   }
 
   &__logo {
@@ -34,20 +43,35 @@ $aix-orange: #ec7200;
     object-fit: contain;
   }
 
-  &__user {
+  &__bottom {
     margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 10px;
+    border-top: 1px solid $line;
+  }
+
+  &__workspace {
+    padding: 2px 6px;
+
+    // keep Clerk's OrganizationSwitcher compact — just the name + avatar
+    .cl-organizationSwitcherTrigger {
+      width: 100%;
+      justify-content: flex-start;
+      padding: 6px 8px;
+      border-radius: 8px;
+    }
+  }
+
+  &__user {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 8px;
-    border-top: 1px solid #ececf1;
+    padding: 6px 8px;
     font-size: 13px;
     font-weight: 500;
   }
-}
-
-.aix-workspace-switcher {
-  padding: 0 4px;
 }
 
 .aix-nav {
@@ -66,8 +90,12 @@ $aix-orange: #ec7200;
     cursor: pointer;
     color: #45454d;
 
+    &:hover {
+      background: $hover;
+    }
+
     &--active {
-      background: rgba($aix-orange, 0.12);
+      background: rgba($aix-orange, 0.1);
       color: $aix-orange;
     }
   }
@@ -76,30 +104,35 @@ $aix-orange: #ec7200;
 .aix-collections {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 
   &__head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 12px;
-    font-size: 12px;
+    padding: 4px 12px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #8a8a94;
+    letter-spacing: 0.05em;
+    color: $muted;
   }
 
   &__add {
     border: none;
-    background: rgba($aix-orange, 0.12);
-    color: $aix-orange;
+    background: transparent;
+    color: $muted;
     width: 22px;
     height: 22px;
     border-radius: 6px;
-    font-size: 16px;
+    font-size: 17px;
     line-height: 1;
     cursor: pointer;
+
+    &:hover {
+      background: $hover;
+      color: $aix-orange;
+    }
   }
 }
 
@@ -107,12 +140,12 @@ $aix-orange: #ec7200;
   display: flex;
   align-items: center;
   border-radius: 8px;
-  padding: 0 6px 0 12px;
   color: #45454d;
   font-size: 14px;
+  padding-right: 4px;
 
   &:hover {
-    background: #f4f4f7;
+    background: $hover;
 
     .aix-collection__edit,
     .aix-collection__del {
@@ -121,35 +154,56 @@ $aix-orange: #ec7200;
   }
 
   &--active {
-    background: rgba($aix-orange, 0.12);
-    color: $aix-orange;
-  }
+    background: rgba($aix-orange, 0.1);
 
-  &__name,
-  &__edit,
-  &__del {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    color: inherit;
+    .aix-collection__name {
+      color: $aix-orange;
+      font-weight: 600;
+    }
   }
 
   &__name {
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
     text-align: left;
-    padding: 8px 0;
-    font: inherit;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: inherit;
+    font-size: 14px;
+    min-width: 0;
+
+    // folder glyph
+    &::before {
+      content: "";
+      flex-shrink: 0;
+      width: 15px;
+      height: 12px;
+      border-radius: 2px 3px 3px 3px;
+      background: currentColor;
+      opacity: 0.35;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M2 4h7l2 2h11v12H2z'/%3E%3C/svg%3E")
+        center/contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'%3E%3Cpath d='M2 4h7l2 2h11v12H2z'/%3E%3C/svg%3E")
+        center/contain no-repeat;
+    }
   }
 
   &__edit,
   &__del {
     opacity: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
     width: 22px;
     font-size: 13px;
-    color: #8a8a94;
+    color: $muted;
 
     &:hover {
-      color: #1b1b1f;
+      color: $ink;
     }
   }
 
@@ -159,6 +213,7 @@ $aix-orange: #ec7200;
     border: 1px solid $aix-orange;
     border-radius: 8px;
     font: inherit;
+    font-size: 14px;
     width: 100%;
   }
 }
@@ -212,7 +267,7 @@ $aix-orange: #ec7200;
 }
 
 .aix-card {
-  border: 1px solid #ececf1;
+  border: 1px solid $line;
   border-radius: 12px;
   overflow: hidden;
   background: #fff;
@@ -239,7 +294,7 @@ $aix-orange: #ec7200;
 
     img {
       width: 44px;
-      opacity: 0.25;
+      opacity: 0.2;
     }
   }
 
@@ -287,7 +342,7 @@ $aix-orange: #ec7200;
 
   &__role {
     font-size: 12px;
-    color: #8a8a94;
+    color: $muted;
     text-transform: capitalize;
   }
 
@@ -302,12 +357,12 @@ $aix-orange: #ec7200;
   cursor: pointer;
   font-size: 18px;
   line-height: 1;
-  color: #8a8a94;
+  color: $muted;
   padding: 2px 6px;
   border-radius: 6px;
 
   &:hover {
-    background: #f4f4f7;
+    background: $hover;
   }
 }
 
@@ -318,7 +373,7 @@ $aix-orange: #ec7200;
   z-index: 20;
   min-width: 168px;
   background: #fff;
-  border: 1px solid #ececf1;
+  border: 1px solid $line;
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14);
   padding: 6px;
@@ -335,10 +390,10 @@ $aix-orange: #ec7200;
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
-    color: #1b1b1f;
+    color: $ink;
 
     &:hover {
-      background: #f4f4f7;
+      background: $hover;
     }
   }
 
@@ -349,7 +404,7 @@ $aix-orange: #ec7200;
   }
 
   &__group {
-    border-top: 1px solid #ececf1;
+    border-top: 1px solid $line;
     margin-top: 4px;
     padding-top: 4px;
   }
@@ -358,19 +413,19 @@ $aix-orange: #ec7200;
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: #8a8a94;
+    color: $muted;
     padding: 4px 10px;
   }
 
   &__danger {
-    border-top: 1px solid #ececf1;
+    border-top: 1px solid $line;
     margin-top: 4px;
     color: #d1453b !important;
   }
 }
 
 .aix-empty {
-  color: #8a8a94;
+  color: $muted;
   font-size: 14px;
   padding: 8px 0;
 }
@@ -393,6 +448,7 @@ $aix-orange: #ec7200;
   gap: 16px;
   font-family: "Figtree", system-ui, sans-serif;
   background: #fbfbfd;
+  color: $ink;
 
   img {
     height: 40px;
@@ -404,49 +460,7 @@ $aix-orange: #ec7200;
   }
 
   a {
-    color: #8a8a94;
+    color: $muted;
     font-size: 13px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  .aix-dashboard,
-  .aix-signedout {
-    background: #18181b;
-    color: #ececf1;
-  }
-
-  .aix-sidebar {
-    background: #202024;
-    border-right-color: #2c2c31;
-  }
-
-  .aix-sidebar__user,
-  .aix-menu__group,
-  .aix-menu__danger {
-    border-color: #2c2c31;
-  }
-
-  .aix-card,
-  .aix-menu {
-    background: #202024;
-    border-color: #2c2c31;
-    color: #ececf1;
-  }
-
-  .aix-card__thumb {
-    background-color: #26262b;
-  }
-
-  .aix-nav__item,
-  .aix-collection,
-  .aix-menu button {
-    color: #c7c7cf;
-  }
-
-  .aix-collection:hover,
-  .aix-menu button:hover,
-  .aix-kebab:hover {
-    background: #2c2c31;
   }
 }

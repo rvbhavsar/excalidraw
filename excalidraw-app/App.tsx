@@ -330,7 +330,11 @@ const initializeScene = async (opts: {
             repairBindings: true,
             deleteInvisibleElements: true,
           }),
-          appState: restoreAppState(drawing.app_state, localDataState?.appState),
+          appState: {
+            ...restoreAppState(drawing.app_state, localDataState?.appState),
+            // the drawing.title column is the source of truth for the name
+            name: drawing.title,
+          },
         },
         isExternalScene: false,
       };
@@ -970,12 +974,26 @@ const ExcalidrawWrapper = () => {
         "is-collaborating": isCollaborating,
       })}
     >
-      <img
-        src={editorTheme === "dark" ? "/aix-logo-dark.png" : "/aix-logo.png"}
-        alt="AIX"
-        className="aix-app-logo"
-        draggable={false}
-      />
+      {CLERK_PUBLISHABLE_KEY ? (
+        <a
+          href="/dashboard"
+          className="aix-app-logo aix-app-logo--link"
+          title="Back to dashboard"
+        >
+          <img
+            src={editorTheme === "dark" ? "/aix-logo-dark.png" : "/aix-logo.png"}
+            alt="AIX — back to dashboard"
+            draggable={false}
+          />
+        </a>
+      ) : (
+        <img
+          src={editorTheme === "dark" ? "/aix-logo-dark.png" : "/aix-logo.png"}
+          alt="AIX"
+          className="aix-app-logo"
+          draggable={false}
+        />
+      )}
       <Excalidraw
         onChange={onChange}
         onExport={onExport}
