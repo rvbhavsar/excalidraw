@@ -162,18 +162,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  border: none;
-  background: transparent;
+  // light hairline box so it reads clearly as the file's name
+  border: 1px solid var(--default-border-color, #e4e4e7);
+  background: var(--island-bg-color, #fff);
   cursor: text;
-  padding: 4px 8px;
+  padding: 5px 10px;
   border-radius: 8px;
+  line-height: 1.1;
   font-family: var(--ui-font);
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--color-on-surface, #1b1b1f);
 
   &:hover {
-    background: var(--button-hover-bg, rgba(0, 0, 0, 0.06));
+    border-color: #ec7200;
   }
 
   &__input {

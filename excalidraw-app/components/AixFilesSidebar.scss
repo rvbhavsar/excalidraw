@@ -2,10 +2,10 @@ $aix-orange: #ec7200;
 
 .aix-files-trigger {
   position: fixed;
-  // stacked directly under the hamburger (top:1rem, 2.25rem tall) so it never
-  // collides with the AIX logo/title that sit to the hamburger's right
+  // top-right, stacked below the library/sidebar toggle button, so the files
+  // panel (which docks right) is triggered from the right side like the library
   top: calc(1rem + 2.25rem + 0.5rem);
-  left: 1rem;
+  right: 1rem;
   z-index: 5;
   width: 2.25rem;
   height: 2.25rem;

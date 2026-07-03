@@ -1,4 +1,9 @@
-import { loginIcon, eyeIcon } from "@excalidraw/excalidraw/components/icons";
+import {
+  loginIcon,
+  eyeIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@excalidraw/excalidraw/components/icons";
 import { MainMenu } from "@excalidraw/excalidraw/index";
 import React from "react";
 
@@ -7,11 +12,39 @@ import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-reac
 
 import type { Theme } from "@excalidraw/element/types";
 
+import { useAtomValue } from "../app-jotai";
+import {
+  createDrawing,
+  currentDrawingIdAtom,
+  deleteDrawing,
+} from "../data/backend";
 import { LanguageList } from "../app-language/LanguageList";
 
 import { saveDebugState } from "./DebugCanvas";
 
 const CLERK_ENABLED = !!import.meta.env.VITE_APP_CLERK_PUBLISHABLE_KEY;
+
+const handleNewDrawing = async () => {
+  try {
+    const drawing = await createDrawing();
+    window.location.assign(`/d/${drawing.id}`);
+  } catch (error) {
+    console.error("failed to create drawing", error);
+  }
+};
+
+const handleDeleteDrawing = async (drawingId: string) => {
+  // eslint-disable-next-line no-alert
+  if (!window.confirm("Delete this drawing? This can't be undone.")) {
+    return;
+  }
+  try {
+    await deleteDrawing(drawingId);
+    window.location.assign("/dashboard");
+  } catch (error) {
+    console.error("failed to delete drawing", error);
+  }
+};
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
@@ -20,6 +53,7 @@ export const AppMainMenu: React.FC<{
   theme: Theme | "system";
   refresh: () => void;
 }> = React.memo((props) => {
+  const currentDrawingId = useAtomValue(currentDrawingIdAtom);
   return (
     <MainMenu>
       <MainMenu.DefaultItems.LoadScene />
@@ -46,6 +80,17 @@ export const AppMainMenu: React.FC<{
             >
               Dashboard
             </MainMenu.Item>
+            <MainMenu.Item icon={PlusIcon} onSelect={handleNewDrawing}>
+              New drawing
+            </MainMenu.Item>
+            {currentDrawingId && (
+              <MainMenu.Item
+                icon={TrashIcon}
+                onSelect={() => handleDeleteDrawing(currentDrawingId)}
+              >
+                Delete drawing
+              </MainMenu.Item>
+            )}
             <MainMenu.ItemCustom>
               <UserButton afterSignOutUrl={window.location.origin} />
             </MainMenu.ItemCustom>
