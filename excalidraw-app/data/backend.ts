@@ -1,3 +1,5 @@
+import { clearAppStateForDatabase } from "@excalidraw/excalidraw/appState";
+
 import type { OrderedExcalidrawElement } from "@excalidraw/element/types";
 import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 
@@ -234,7 +236,10 @@ export const saveDrawing = async (
     method: "PUT",
     body: JSON.stringify({
       elements,
-      app_state: appState,
+      // strip volatile/session-only appState (collaborators Map, selection,
+      // scroll/zoom, editing refs). Persisting the raw appState serializes
+      // `collaborators` to {}, which crashes on reload (.forEach is not a fn).
+      app_state: clearAppStateForDatabase(appState),
       files,
       scene_version: sceneVersion,
       // keep the dashboard's drawing.title in sync with the scene name that

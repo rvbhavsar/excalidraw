@@ -49,6 +49,7 @@ import {
   youtubeIcon,
 } from "@excalidraw/excalidraw/components/icons";
 import { isElementLink } from "@excalidraw/element";
+import { clearAppStateForDatabase } from "@excalidraw/excalidraw/appState";
 import {
   bumpElementVersions,
   restoreAppState,
@@ -331,7 +332,13 @@ const initializeScene = async (opts: {
             deleteInvisibleElements: true,
           }),
           appState: {
-            ...restoreAppState(drawing.app_state, localDataState?.appState),
+            // clean first: older saves persisted a serialized `collaborators`
+            // ({}), which crashes on load — strip it so Excalidraw rebuilds the
+            // default Map. Safe for both poisoned and clean records.
+            ...restoreAppState(
+              clearAppStateForDatabase(drawing.app_state),
+              localDataState?.appState,
+            ),
             // the drawing.title column is the source of truth for the name
             name: drawing.title,
           },
