@@ -31,8 +31,10 @@ import type { ValueOf } from "@excalidraw/common/utility-types";
 
 import type { Scene } from "@excalidraw/element";
 
+import { AverageSansFontFaces } from "./AverageSans";
 import { CascadiaFontFaces } from "./Cascadia";
 import { ComicShannsFontFaces } from "./ComicShanns";
+import { DMMonoFontFaces } from "./DMMono";
 import { EmojiFontFaces } from "./Emoji";
 import { ExcalidrawFontFace } from "./ExcalidrawFontFace";
 import { ExcalifontFontFaces } from "./Excalifont";
@@ -40,6 +42,7 @@ import { HelveticaFontFaces } from "./Helvetica";
 import { LiberationFontFaces } from "./Liberation";
 import { LilitaFontFaces } from "./Lilita";
 import { NunitoFontFaces } from "./Nunito";
+import { QuicksandFontFaces } from "./Quicksand";
 import { VirgilFontFaces } from "./Virgil";
 import { XiaolaiFontFaces } from "./Xiaolai";
 
@@ -391,6 +394,9 @@ export class Fonts {
     init("Liberation Sans", ...LiberationFontFaces);
     init("Lilita One", ...LilitaFontFaces);
     init("Nunito", ...NunitoFontFaces);
+    init("Quicksand", ...QuicksandFontFaces);
+    init("Average Sans", ...AverageSansFontFaces);
+    init("DM Mono", ...DMMonoFontFaces);
     init("Virgil", ...VirgilFontFaces);
 
     // fallback font faces

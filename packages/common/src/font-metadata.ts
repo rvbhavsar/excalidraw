@@ -65,6 +65,30 @@ export const FONT_METADATA: Record<number, FontMetadata> = {
       lineHeight: 1.25,
     },
   },
+  [FONT_FAMILY.Quicksand]: {
+    metrics: {
+      unitsPerEm: 1000,
+      ascender: 1000,
+      descender: -250,
+      lineHeight: 1.25,
+    },
+  },
+  [FONT_FAMILY["Average Sans"]]: {
+    metrics: {
+      unitsPerEm: 1000,
+      ascender: 1027,
+      descender: -269,
+      lineHeight: 1.3,
+    },
+  },
+  [FONT_FAMILY["DM Mono"]]: {
+    metrics: {
+      unitsPerEm: 1000,
+      ascender: 992,
+      descender: -310,
+      lineHeight: 1.3,
+    },
+  },
   [FONT_FAMILY.Virgil]: {
     metrics: {
       unitsPerEm: 1000,

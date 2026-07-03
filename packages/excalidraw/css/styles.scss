@@ -342,6 +342,7 @@ body.excalidraw-cursor-resize * {
   .shapes-section {
     display: flex;
     justify-content: center;
+    align-self: flex-end;
     pointer-events: none !important;
 
     & > * {
@@ -353,6 +354,7 @@ body.excalidraw-cursor-resize * {
     grid-template-columns: 1fr 2fr 1fr;
     grid-gap: 1rem;
     align-items: flex-start;
+    height: 100%;
     cursor: default;
     pointer-events: none !important;
 

@@ -1,10 +1,39 @@
 @import "../packages/excalidraw/css/variables.module.scss";
 
 .excalidraw {
-  --color-primary-contrast-offset: #625ee0; // to offset Chubb illusion
+  // AIX brand theme: orange (#EC7200) as the dominant accent, replacing
+  // Excalidraw's default purple. A muted indigo/purple is kept only as a
+  // subtle secondary tone (contrast-offset, selection-box tint) for depth.
+  --color-primary-contrast-offset: #a34e00; // to offset Chubb illusion
+  --color-primary: #ec7200;
+  --color-primary-darker: #d66700;
+  --color-primary-darkest: #b35700;
+  --color-primary-light: #ffe6cc;
+  --color-primary-light-darker: #ffd8ad;
+  --color-primary-hover: #d66700;
+  --color-brand-hover: #d66700;
+  --color-brand-active: #b35700;
+  --color-promo: var(--color-primary);
+  --color-logo-icon: var(--color-primary);
+  --color-selection: #ec7200;
+  --color-on-primary-container: #5c2c00;
+  --color-surface-primary-container: #ffe6cc;
+  --focus-highlight-color: #ffb877;
 
   &.theme--dark {
-    --color-primary-contrast-offset: #726dff; // to offset Chubb illusion
+    --color-primary-contrast-offset: #ffb877; // to offset Chubb illusion
+    --color-primary: #ff9142;
+    --color-primary-darker: #ffa563;
+    --color-primary-darkest: #ffb885;
+    --color-primary-light: #4a2e12;
+    --color-primary-light-darker: #5c3a17;
+    --color-primary-hover: #ffa563;
+    --color-brand-hover: #ffa563;
+    --color-brand-active: #ffc299;
+    --color-selection: #ff9142;
+    --color-on-primary-container: #ffe6cc;
+    --color-surface-primary-container: #5c3a17;
+    --focus-highlight-color: #d66700;
   }
 
   .footer-center {
@@ -80,51 +109,60 @@
   }
 }
 
+.excalidraw-app {
+  position: relative;
+}
+
 .excalidraw-app.is-collaborating {
   [data-testid="clear-canvas-button"] {
     display: none;
   }
 }
 
-.plus-banner {
-  display: flex;
-  justify-content: center;
-  cursor: pointer;
-  align-items: center;
-  border: 1px solid var(--color-primary);
-  padding: 0.5rem 0.875rem;
-  border-radius: var(--border-radius-lg);
-  background-color: var(--island-bg-color);
-  text-decoration: none !important;
+.aix-app-logo {
+  position: absolute;
+  // vertically centered against the 2.25rem-tall hamburger button, which
+  // sits at top: 1rem (--editor-container-padding, --lg-button-size)
+  top: calc(1rem + (2.25rem - 1.75rem) / 2);
+  left: calc(1rem + 2.25rem + 0.75rem);
+  height: 1.75rem;
+  width: auto;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
 
-  font-family: var(--ui-font);
-  font-size: 0.8333rem;
-  box-sizing: border-box;
-  height: var(--lg-button-size);
-
-  border: none;
-  box-shadow: 0 0 0 1px var(--color-surface-lowest);
-  background-color: var(--color-surface-low);
-  color: var(--button-color, var(--color-on-surface)) !important;
-
-  &:active {
-    box-shadow: 0 0 0 1px var(--color-brand-active);
-  }
-
-  &:hover {
-    background-color: var(--color-primary);
-    color: white !important;
-  }
-
-  &:active {
-    background-color: var(--color-primary-darker);
+  @media (max-width: 640px) {
+    display: none;
   }
 }
 
-.theme--dark {
-  .plus-banner {
-    &:hover {
-      color: black !important;
-    }
+.aix-sign-in-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--border-radius-lg);
+  padding: 0.625rem 1rem;
+  font-family: var(--ui-font);
+  font-size: 0.8333rem;
+  font-weight: 600;
+  color: #fff !important;
+  background: linear-gradient(135deg, #6965db 0%, #4a45c7 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition:
+    transform 0.1s ease,
+    box-shadow 0.1s ease,
+    filter 0.1s ease;
+
+  &:hover {
+    filter: brightness(1.08);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+
+  &:active {
+    transform: translateY(1px);
+    filter: brightness(0.96);
   }
 }

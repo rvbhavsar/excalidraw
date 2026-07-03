@@ -2,12 +2,7 @@ import clsx from "clsx";
 import { useRef, useState } from "react";
 import { Popover } from "radix-ui";
 
-import {
-  CLASSES,
-  KEYS,
-  capitalizeString,
-  isTransparent,
-} from "@excalidraw/common";
+import { CLASSES, capitalizeString, isTransparent } from "@excalidraw/common";
 
 import {
   shouldAllowVerticalAlign,
@@ -70,9 +65,7 @@ import { PropertiesPopover } from "./PropertiesPopover";
 import {
   EmbedIcon,
   extraToolsIcon,
-  frameToolIcon,
   mermaidLogoIcon,
-  laserPointerToolIcon,
   MagicIcon,
   LassoIcon,
   sharpArrowIcon,
@@ -1092,8 +1085,6 @@ export const ShapesSwitcher = ({
     },
   ] as const;
 
-  const frameToolSelected = activeTool.type === "frame";
-  const laserToolSelected = activeTool.type === "laser";
   const lassoToolSelected =
     isFullStylesPanel &&
     activeTool.type === "lasso" &&
@@ -1108,7 +1099,7 @@ export const ShapesSwitcher = ({
       {getToolbarTools(app).map(
         ({ value, icon, key, numericKey, fillable, toolbar }) => {
           if (
-            toolbar === false ||
+            (toolbar as boolean) === false ||
             UIOptions.tools?.[
               value as Extract<
                 typeof value,
@@ -1215,19 +1206,22 @@ export const ShapesSwitcher = ({
           );
         },
       )}
+      <ToolButton
+        className="Shape"
+        type="icon"
+        icon={mermaidLogoIcon}
+        title={t("toolBar.mermaidToExcalidraw")}
+        aria-label={t("toolBar.mermaidToExcalidraw")}
+        data-testid="toolbar-mermaid-to-excalidraw"
+        onClick={() => app.setOpenDialog({ name: "ttd", tab: "mermaid" })}
+      />
       <div className="App-toolbar__divider" />
 
       <DropdownMenu open={isExtraToolsMenuOpen}>
         <DropdownMenu.Trigger
           className={clsx("App-toolbar__extra-tools-trigger", {
             "App-toolbar__extra-tools-trigger--selected":
-              frameToolSelected ||
-              embeddableToolSelected ||
-              lassoToolSelected ||
-              // in collab we're already highlighting the laser button
-              // outside toolbar, so let's not highlight extra-tools button
-              // on top of it
-              (laserToolSelected && !app.props.isCollaborating),
+              embeddableToolSelected || lassoToolSelected,
           })}
           onToggle={() => {
             setIsExtraToolsMenuOpen(!isExtraToolsMenuOpen);
@@ -1235,12 +1229,8 @@ export const ShapesSwitcher = ({
           }}
           title={t("toolBar.extraTools")}
         >
-          {frameToolSelected
-            ? frameToolIcon
-            : embeddableToolSelected
+          {embeddableToolSelected
             ? EmbedIcon
-            : laserToolSelected && !app.props.isCollaborating
-            ? laserPointerToolIcon
             : lassoToolSelected
             ? LassoIcon
             : extraToolsIcon}
@@ -1251,30 +1241,12 @@ export const ShapesSwitcher = ({
           className="App-toolbar__extra-tools-dropdown"
         >
           <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "frame" })}
-            icon={frameToolIcon}
-            shortcut={KEYS.F.toLocaleUpperCase()}
-            data-testid="toolbar-frame"
-            selected={frameToolSelected}
-          >
-            {t("toolBar.frame")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
             onSelect={() => app.setActiveTool({ type: "embeddable" })}
             icon={EmbedIcon}
             data-testid="toolbar-embeddable"
             selected={embeddableToolSelected}
           >
             {t("toolBar.embeddable")}
-          </DropdownMenu.Item>
-          <DropdownMenu.Item
-            onSelect={() => app.setActiveTool({ type: "laser" })}
-            icon={laserPointerToolIcon}
-            data-testid="toolbar-laser"
-            selected={laserToolSelected}
-            shortcut={KEYS.K.toLocaleUpperCase()}
-          >
-            {t("toolBar.laser")}
           </DropdownMenu.Item>
           {isFullStylesPanel && (
             <DropdownMenu.Item
@@ -1290,13 +1262,6 @@ export const ShapesSwitcher = ({
             Generate
           </div>
           {app.props.aiEnabled !== false && <TTDDialogTriggerTunnel.Out />}
-          <DropdownMenu.Item
-            onSelect={() => app.setOpenDialog({ name: "ttd", tab: "mermaid" })}
-            icon={mermaidLogoIcon}
-            data-testid="toolbar-embeddable"
-          >
-            {t("toolBar.mermaidToExcalidraw")}
-          </DropdownMenu.Item>
           {app.props.aiEnabled !== false && app.plugins.diagramToCode && (
             <DropdownMenu.Item
               onSelect={() => app.onMagicframeToolSelect()}

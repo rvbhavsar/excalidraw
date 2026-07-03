@@ -20,6 +20,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { atom, useAtom, useAtomValue } from "../app-jotai";
 import { activeRoomLinkAtom } from "../collab/Collab";
+import { getCollaborationLinkData } from "../data";
+import { inviteMember } from "../data/backend";
 
 import "./ShareDialog.scss";
 import { QRCode } from "./QRCode";
@@ -69,6 +71,22 @@ const ActiveRoomDialog = ({
   const ref = useRef<HTMLInputElement>(null);
   const isShareSupported = "share" in navigator;
   const { onCopy, copyStatus } = useCopyStatus();
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const roomId = getCollaborationLinkData(activeRoomLink)?.roomId ?? null;
+
+  const handleInvite = async () => {
+    if (!roomId || !inviteEmail) {
+      return;
+    }
+    try {
+      await inviteMember(roomId, inviteEmail);
+      setInviteStatus(`Invited ${inviteEmail}`);
+      setInviteEmail("");
+    } catch (error: any) {
+      setInviteStatus(error.message);
+    }
+  };
 
   const copyRoomLink = async () => {
     try {
@@ -144,6 +162,23 @@ const ActiveRoomDialog = ({
         />
       </div>
       <QRCode value={activeRoomLink} />
+      {roomId && (
+        <div className="ShareDialog__active__linkRow">
+          <TextField
+            label="Invite by email"
+            placeholder="teammate@company.com"
+            value={inviteEmail}
+            onChange={setInviteEmail}
+            onKeyDown={(event) => event.key === KEYS.ENTER && handleInvite()}
+          />
+          <FilledButton size="large" label="Invite" onClick={handleInvite} />
+        </div>
+      )}
+      {inviteStatus && (
+        <div className="ShareDialog__active__description">
+          <p>{inviteStatus}</p>
+        </div>
+      )}
       <div className="ShareDialog__active__description">
         <p>
           <span

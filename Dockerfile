@@ -6,10 +6,15 @@ COPY . .
 
 # do not ignore optional dependencies:
 # Error: Cannot find module @rollup/rollup-linux-x64-gnu
-RUN --mount=type=cache,target=/root/.cache/yarn \
-    npm_config_target_arch=${TARGETARCH} yarn --frozen-lockfile --network-timeout 600000
+RUN npm_config_target_arch=${TARGETARCH} yarn --frozen-lockfile --network-timeout 600000
 
 ARG NODE_ENV=production
+
+# Railway injects matching service variables as build args automatically
+ARG VITE_APP_API_URL
+ARG VITE_APP_CLERK_PUBLISHABLE_KEY
+ENV VITE_APP_API_URL=${VITE_APP_API_URL}
+ENV VITE_APP_CLERK_PUBLISHABLE_KEY=${VITE_APP_CLERK_PUBLISHABLE_KEY}
 
 RUN npm_config_target_arch=${TARGETARCH} yarn build:app:docker
 
