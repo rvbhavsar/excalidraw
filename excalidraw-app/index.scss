@@ -121,9 +121,10 @@
 
 .aix-topbar {
   position: absolute;
-  // vertically centered against the 2.25rem-tall hamburger button, which
-  // sits at top: 1rem (--editor-container-padding, --lg-button-size)
-  top: calc(1rem + (2.25rem - 1.75rem) / 2);
+  // pin to the hamburger's band (top:1rem, 2.25rem tall) and center children
+  // within it, so the logo and title box line up with the hamburger button
+  top: 1rem;
+  height: 2.25rem;
   left: calc(1rem + 2.25rem + 0.75rem);
   z-index: 3;
   display: flex;
@@ -156,7 +157,13 @@
   }
 }
 
+$aix-title-font: "Figtree", system-ui, -apple-system, "Segoe UI", Roboto,
+  sans-serif;
+
 .aix-drawing-title {
+  display: flex;
+  align-items: center;
+  height: 2.25rem; // match the hamburger/logo band exactly
   pointer-events: auto;
   max-width: 28vw;
   overflow: hidden;
@@ -166,12 +173,12 @@
   border: 1px solid var(--default-border-color, #e4e4e7);
   background: var(--island-bg-color, #fff);
   cursor: text;
-  padding: 5px 10px;
+  padding: 0 12px;
   border-radius: 8px;
-  line-height: 1.1;
-  font-family: var(--ui-font);
+  font-family: $aix-title-font;
   font-size: 0.875rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--color-on-surface, #1b1b1f);
 
   &:hover {
@@ -180,12 +187,14 @@
 
   &__input {
     pointer-events: auto;
-    padding: 4px 8px;
+    height: 2.25rem;
+    padding: 0 11px;
     border: 1px solid #ec7200;
     border-radius: 8px;
-    font-family: var(--ui-font);
-    font-size: 0.9375rem;
+    font-family: $aix-title-font;
+    font-size: 0.875rem;
     font-weight: 600;
+    letter-spacing: -0.01em;
     width: 16rem;
     max-width: 28vw;
   }
