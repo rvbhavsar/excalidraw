@@ -2,12 +2,12 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
-from auth import get_current_user_id
+from auth import AuthContext, get_current_context, get_user_org_ids
 from db import get_db
-from models import Drawing, PendingInvite, RoomMember, User
+from models import Collection, Drawing, PendingInvite, RoomMember, User, Workspace
+from services import ensure_workspace
 
 router = APIRouter(prefix="/api/drawings", tags=["drawings"])
 
@@ -17,6 +17,9 @@ class DrawingSummary(BaseModel):
     title: str
     updated_at: str
     role: str
+    thumbnail: str | None = None
+    workspace_id: uuid.UUID | None = None
+    collection_id: uuid.UUID | None = None
 
     class Config:
         from_attributes = True
@@ -24,6 +27,7 @@ class DrawingSummary(BaseModel):
 
 class DrawingCreate(BaseModel):
     title: str = "Untitled"
+    collection_id: uuid.UUID | None = None
 
 
 class DrawingSave(BaseModel):
@@ -32,6 +36,12 @@ class DrawingSave(BaseModel):
     app_state: dict = {}
     files: dict = {}
     scene_version: int
+    thumbnail: str | None = None
+
+
+class DrawingUpdate(BaseModel):
+    title: str | None = None
+    collection_id: uuid.UUID | None = None
 
 
 class DrawingOut(BaseModel):
@@ -43,6 +53,8 @@ class DrawingOut(BaseModel):
     scene_version: int
     is_room_active: bool
     role: str
+    workspace_id: uuid.UUID | None = None
+    collection_id: uuid.UUID | None = None
 
     class Config:
         from_attributes = True
@@ -53,10 +65,6 @@ class MemberInvite(BaseModel):
     role: str = "editor"
 
 
-class DrawingRename(BaseModel):
-    title: str
-
-
 class MemberOut(BaseModel):
     user_id: str | None = None
     email: str
@@ -64,71 +72,7 @@ class MemberOut(BaseModel):
     pending: bool
 
 
-def _role_for(drawing: Drawing, user_id: str) -> str | None:
-    if drawing.owner_id == user_id:
-        return "owner"
-    for m in drawing.members:
-        if m.user_id == user_id:
-            return m.role
-    return None
-
-
-def _get_drawing_or_404(db: Session, drawing_id: uuid.UUID, user_id: str) -> tuple[Drawing, str]:
-    drawing = db.get(Drawing, drawing_id)
-    if not drawing:
-        raise HTTPException(status_code=404, detail="Drawing not found")
-    role = _role_for(drawing, user_id)
-    if role is None:
-        raise HTTPException(status_code=403, detail="Not a member of this drawing")
-    return drawing, role
-
-
-@router.get("", response_model=list[DrawingSummary])
-def list_drawings(user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    owned = db.query(Drawing).filter(Drawing.owner_id == user_id).all()
-    shared_ids = [
-        m.drawing_id for m in db.query(RoomMember).filter(RoomMember.user_id == user_id).all()
-    ]
-    shared = db.query(Drawing).filter(Drawing.id.in_(shared_ids)).all() if shared_ids else []
-
-    results = []
-    for d in owned:
-        results.append(DrawingSummary(id=d.id, title=d.title, updated_at=d.updated_at.isoformat(), role="owner"))
-    for d in shared:
-        role = _role_for(d, user_id) or "editor"
-        results.append(DrawingSummary(id=d.id, title=d.title, updated_at=d.updated_at.isoformat(), role=role))
-    return results
-
-
-@router.post("", response_model=DrawingOut)
-def create_drawing(
-    body: DrawingCreate,
-    user_id: str = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-):
-    drawing = Drawing(owner_id=user_id, title=body.title, elements=[], app_state={}, files={})
-    db.add(drawing)
-    db.commit()
-    db.refresh(drawing)
-    return DrawingOut(
-        id=drawing.id,
-        title=drawing.title,
-        elements=drawing.elements,
-        app_state=drawing.app_state,
-        files=drawing.files,
-        scene_version=drawing.scene_version,
-        is_room_active=drawing.is_room_active,
-        role="owner",
-    )
-
-
-@router.get("/{drawing_id}", response_model=DrawingOut)
-def get_drawing(
-    drawing_id: uuid.UUID,
-    user_id: str = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
-):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+def _out(drawing: Drawing, role: str) -> DrawingOut:
     return DrawingOut(
         id=drawing.id,
         title=drawing.title,
@@ -138,58 +82,181 @@ def get_drawing(
         scene_version=drawing.scene_version,
         is_room_active=drawing.is_room_active,
         role=role,
+        workspace_id=drawing.workspace_id,
+        collection_id=drawing.collection_id,
     )
 
 
-@router.put("/{drawing_id}", response_model=DrawingOut)
-def save_drawing(
-    drawing_id: uuid.UUID,
-    body: DrawingSave,
-    user_id: str = Depends(get_current_user_id),
+def _summary(drawing: Drawing, role: str) -> DrawingSummary:
+    return DrawingSummary(
+        id=drawing.id,
+        title=drawing.title,
+        updated_at=drawing.updated_at.isoformat(),
+        role=role,
+        thumbnail=drawing.thumbnail,
+        workspace_id=drawing.workspace_id,
+        collection_id=drawing.collection_id,
+    )
+
+
+async def _accessible_workspace_ids(db: Session, user_id: str) -> set[uuid.UUID]:
+    org_ids = await get_user_org_ids(user_id)
+    if not org_ids:
+        return set()
+    rows = db.query(Workspace.id).filter(Workspace.clerk_org_id.in_(org_ids)).all()
+    return {r[0] for r in rows}
+
+
+def _role_for(drawing: Drawing, user_id: str, workspace_ids: set[uuid.UUID]) -> str | None:
+    if drawing.owner_id == user_id:
+        return "owner"
+    for m in drawing.members:
+        if m.user_id == user_id:
+            return m.role
+    if drawing.workspace_id is not None and drawing.workspace_id in workspace_ids:
+        return "editor"
+    return None
+
+
+async def _get_drawing_or_404(
+    db: Session, drawing_id: uuid.UUID, user_id: str
+) -> tuple[Drawing, str]:
+    drawing = db.get(Drawing, drawing_id)
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    ws_ids = await _accessible_workspace_ids(db, user_id)
+    role = _role_for(drawing, user_id, ws_ids)
+    if role is None:
+        raise HTTPException(status_code=403, detail="Not a member of this drawing")
+    return drawing, role
+
+
+# summary cards never need the heavy JSONB blobs (elements/app_state/files),
+# so load only the columns we serialize — critical now that the workspace query
+# can pull in every team drawing (each with inline base64 images in `files`).
+_SUMMARY_COLS = load_only(
+    Drawing.id,
+    Drawing.title,
+    Drawing.updated_at,
+    Drawing.thumbnail,
+    Drawing.workspace_id,
+    Drawing.collection_id,
+    Drawing.owner_id,
+)
+
+
+@router.get("", response_model=list[DrawingSummary])
+async def list_drawings(
+    ctx: AuthContext = Depends(get_current_context), db: Session = Depends(get_db)
+):
+    user_id = ctx.user_id
+    ws_ids = await _accessible_workspace_ids(db, user_id)
+
+    shared_roles = {
+        m.drawing_id: m.role
+        for m in db.query(RoomMember).filter(RoomMember.user_id == user_id).all()
+    }
+
+    by_id: dict[uuid.UUID, Drawing] = {}
+    for d in (
+        db.query(Drawing).options(_SUMMARY_COLS).filter(Drawing.owner_id == user_id).all()
+    ):
+        by_id[d.id] = d
+    if shared_roles:
+        for d in (
+            db.query(Drawing)
+            .options(_SUMMARY_COLS)
+            .filter(Drawing.id.in_(list(shared_roles)))
+            .all()
+        ):
+            by_id[d.id] = d
+    if ws_ids:
+        for d in (
+            db.query(Drawing)
+            .options(_SUMMARY_COLS)
+            .filter(Drawing.workspace_id.in_(ws_ids))
+            .all()
+        ):
+            by_id[d.id] = d
+
+    def role(d: Drawing) -> str:
+        if d.owner_id == user_id:
+            return "owner"
+        if d.id in shared_roles:
+            return shared_roles[d.id]
+        return "editor"  # workspace member
+
+    return [_summary(d, role(d)) for d in by_id.values()]
+
+
+@router.post("", response_model=DrawingOut)
+async def create_drawing(
+    body: DrawingCreate,
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+    workspace_id = None
+    if ctx.org_id:
+        workspace = await ensure_workspace(db, ctx.org_id)
+        workspace_id = workspace.id
+    drawing = Drawing(
+        owner_id=ctx.user_id,
+        workspace_id=workspace_id,
+        collection_id=body.collection_id,
+        title=body.title,
+        elements=[],
+        app_state={},
+        files={},
+    )
+    db.add(drawing)
+    db.commit()
+    db.refresh(drawing)
+    return _out(drawing, "owner")
+
+
+@router.get("/{drawing_id}", response_model=DrawingOut)
+async def get_drawing(
+    drawing_id: uuid.UUID,
+    ctx: AuthContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
+    return _out(drawing, role)
+
+
+@router.put("/{drawing_id}", response_model=DrawingOut)
+async def save_drawing(
+    drawing_id: uuid.UUID,
+    body: DrawingSave,
+    ctx: AuthContext = Depends(get_current_context),
+    db: Session = Depends(get_db),
+):
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role not in ("owner", "editor"):
         raise HTTPException(status_code=403, detail="Read-only access")
     if body.scene_version < drawing.scene_version:
         # stale write, return current authoritative state instead of overwriting
-        return DrawingOut(
-            id=drawing.id,
-            title=drawing.title,
-            elements=drawing.elements,
-            app_state=drawing.app_state,
-            files=drawing.files,
-            scene_version=drawing.scene_version,
-            is_room_active=drawing.is_room_active,
-            role=role,
-        )
+        return _out(drawing, role)
     if body.title is not None:
         drawing.title = body.title
+    if body.thumbnail is not None:
+        drawing.thumbnail = body.thumbnail
     drawing.elements = body.elements
     drawing.app_state = body.app_state
     drawing.files = {**drawing.files, **body.files}
     drawing.scene_version = body.scene_version
     db.commit()
     db.refresh(drawing)
-    return DrawingOut(
-        id=drawing.id,
-        title=drawing.title,
-        elements=drawing.elements,
-        app_state=drawing.app_state,
-        files=drawing.files,
-        scene_version=drawing.scene_version,
-        is_room_active=drawing.is_room_active,
-        role=role,
-    )
+    return _out(drawing, role)
 
 
 @router.delete("/{drawing_id}")
-def delete_drawing(
+async def delete_drawing(
     drawing_id: uuid.UUID,
-    user_id: str = Depends(get_current_user_id),
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can delete")
     db.delete(drawing)
@@ -198,30 +265,32 @@ def delete_drawing(
 
 
 @router.patch("/{drawing_id}", response_model=DrawingSummary)
-def rename_drawing(
+async def update_drawing(
     drawing_id: uuid.UUID,
-    body: DrawingRename,
-    user_id: str = Depends(get_current_user_id),
+    body: DrawingUpdate,
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role not in ("owner", "editor"):
         raise HTTPException(status_code=403, detail="Read-only access")
-    drawing.title = body.title
+    fields = body.model_fields_set
+    if "title" in fields and body.title is not None:
+        drawing.title = body.title
+    if "collection_id" in fields:
+        drawing.collection_id = body.collection_id
     db.commit()
     db.refresh(drawing)
-    return DrawingSummary(
-        id=drawing.id, title=drawing.title, updated_at=drawing.updated_at.isoformat(), role=role
-    )
+    return _summary(drawing, role)
 
 
 @router.get("/{drawing_id}/members", response_model=list[MemberOut])
-def list_members(
+async def list_members(
     drawing_id: uuid.UUID,
-    user_id: str = Depends(get_current_user_id),
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, _role = _get_drawing_or_404(db, drawing_id, user_id)
+    drawing, _role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     owner = db.get(User, drawing.owner_id)
     result = [
         MemberOut(user_id=owner.id, email=owner.email or "", role="owner", pending=False)
@@ -237,13 +306,13 @@ def list_members(
 
 
 @router.post("/{drawing_id}/members")
-def invite_member(
+async def invite_member(
     drawing_id: uuid.UUID,
     body: MemberInvite,
-    user_id: str = Depends(get_current_user_id),
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can invite")
 
@@ -280,13 +349,13 @@ def invite_member(
 
 
 @router.delete("/{drawing_id}/members/{member_user_id}")
-def remove_member(
+async def remove_member(
     drawing_id: uuid.UUID,
     member_user_id: str,
-    user_id: str = Depends(get_current_user_id),
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can remove members")
     db.query(RoomMember).filter(
@@ -297,13 +366,13 @@ def remove_member(
 
 
 @router.delete("/{drawing_id}/pending-invites/{email}")
-def remove_pending_invite(
+async def remove_pending_invite(
     drawing_id: uuid.UUID,
     email: str,
-    user_id: str = Depends(get_current_user_id),
+    ctx: AuthContext = Depends(get_current_context),
     db: Session = Depends(get_db),
 ):
-    drawing, role = _get_drawing_or_404(db, drawing_id, user_id)
+    drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role != "owner":
         raise HTTPException(status_code=403, detail="Only the owner can remove invites")
     db.query(PendingInvite).filter(

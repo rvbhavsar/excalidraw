@@ -7,7 +7,9 @@ import {
   useEditorInterface,
   ExcalidrawAPIProvider,
   useExcalidrawAPI,
+  exportToBlob,
 } from "@excalidraw/excalidraw";
+import { getDataURL } from "@excalidraw/excalidraw/data/blob";
 import { trackEvent } from "@excalidraw/excalidraw/analytics";
 import { getDefaultAppState } from "@excalidraw/excalidraw/appState";
 import {
@@ -33,7 +35,7 @@ import {
   isDevEnv,
 } from "@excalidraw/common";
 import polyfill from "@excalidraw/excalidraw/polyfill";
-import { ClerkProvider, useAuth } from "@clerk/clerk-react";
+import { ClerkProvider, SignedIn, useAuth } from "@clerk/clerk-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { loadFromBlob } from "@excalidraw/excalidraw/data/blob";
 import { t } from "@excalidraw/excalidraw/i18n";
@@ -124,7 +126,8 @@ import {
   getDrawing,
   saveDrawing,
 } from "./data/backend";
-import { MyDrawingsDialog } from "./components/MyDrawingsDialog";
+import { DashboardPage } from "./dashboard/DashboardPage";
+import { AixFilesSidebar } from "./components/AixFilesSidebar";
 import {
   LibraryIndexedDBAdapter,
   LibraryLocalStorageMigrationAdapter,
@@ -199,6 +202,35 @@ if (window.self !== window.top) {
   }
 }
 
+// last-generated thumbnail per drawing id. Generating a full canvas export is
+// expensive, so we refresh it on a slow throttle (below) and let the normal,
+// fast save ride along with whatever's cached rather than rendering every save.
+const thumbnailCache = new Map<string, string>();
+
+const queueGenerateThumbnail = throttle(
+  async (
+    drawingId: string,
+    elements: readonly OrderedExcalidrawElement[],
+    appState: AppState,
+    files: BinaryFiles,
+  ) => {
+    try {
+      const blob = await exportToBlob({
+        elements,
+        appState: { ...appState, exportBackground: true },
+        files,
+        mimeType: "image/jpeg",
+        quality: 0.7,
+        maxWidthOrHeight: 400,
+      });
+      thumbnailCache.set(drawingId, await getDataURL(blob));
+    } catch (error) {
+      console.error("failed to generate thumbnail", error);
+    }
+  },
+  15000,
+);
+
 const queueSaveDrawing = throttle(
   (
     drawingId: string,
@@ -206,9 +238,13 @@ const queueSaveDrawing = throttle(
     appState: AppState,
     files: BinaryFiles,
   ) => {
-    saveDrawing(drawingId, getSyncableElements(elements), appState, files).catch(
-      (error) => console.error("failed to save drawing", error),
-    );
+    saveDrawing(
+      drawingId,
+      getSyncableElements(elements),
+      appState,
+      files,
+      thumbnailCache.get(drawingId) ?? null,
+    ).catch((error) => console.error("failed to save drawing", error));
   },
   SAVE_TO_LOCAL_STORAGE_TIMEOUT,
 );
@@ -432,7 +468,6 @@ const ExcalidrawWrapper = () => {
   const excalidrawAPI = useExcalidrawAPI();
 
   const [errorMessage, setErrorMessage] = useState("");
-  const [myDrawingsDialogOpen, setMyDrawingsDialogOpen] = useState(false);
   const isCollabDisabled = isRunningInIframe();
 
   const { editorTheme, appTheme, setAppTheme } = useHandleAppTheme();
@@ -745,6 +780,7 @@ const ExcalidrawWrapper = () => {
     } else {
       const drawingId = appJotaiStore.get(currentDrawingIdAtom);
       if (drawingId) {
+        queueGenerateThumbnail(drawingId, elements, appState, files);
         queueSaveDrawing(drawingId, elements, appState, files);
       }
     }
@@ -988,14 +1024,15 @@ const ExcalidrawWrapper = () => {
       >
         <AppMainMenu
           onCollabDialogOpen={onCollabDialogOpen}
-          onMyDrawingsOpen={() => setMyDrawingsDialogOpen(true)}
           isCollaborating={isCollaborating}
           isCollabEnabled={!isCollabDisabled}
           theme={appTheme}
           refresh={() => forceRefresh((prev) => !prev)}
         />
-        {myDrawingsDialogOpen && (
-          <MyDrawingsDialog onClose={() => setMyDrawingsDialogOpen(false)} />
+        {CLERK_PUBLISHABLE_KEY && (
+          <SignedIn>
+            <AixFilesSidebar excalidrawAPI={excalidrawAPI} />
+          </SignedIn>
         )}
         <AppWelcomeScreen
           onCollabDialogOpen={onCollabDialogOpen}
@@ -1231,25 +1268,57 @@ const ExcalidrawApp = () => {
     return <ExcalidrawPlusIframeExport />;
   }
 
-  const app = (
-    <TopErrorBoundary>
-      <Provider store={appJotaiStore}>
-        <ExcalidrawAPIProvider>
-          <ExcalidrawWrapper />
-        </ExcalidrawAPIProvider>
-      </Provider>
-    </TopErrorBoundary>
+  const canvas = (
+    <ExcalidrawAPIProvider>
+      <ExcalidrawWrapper />
+    </ExcalidrawAPIProvider>
   );
 
   if (!CLERK_PUBLISHABLE_KEY) {
-    return app;
+    return (
+      <TopErrorBoundary>
+        <Provider store={appJotaiStore}>{canvas}</Provider>
+      </TopErrorBoundary>
+    );
   }
 
   return (
     <ClerkProvider publishableKey={CLERK_PUBLISHABLE_KEY}>
-      {app}
+      <TopErrorBoundary>
+        <Provider store={appJotaiStore}>
+          <RootView canvas={canvas} />
+        </Provider>
+      </TopErrorBoundary>
     </ClerkProvider>
   );
+};
+
+/** Signed-in users land on the dashboard; the canvas stays the entry point for
+ * direct drawing links (/d/:id), collab links, and signed-out visitors. */
+const RootView = ({ canvas }: { canvas: React.ReactNode }) => {
+  const { isLoaded, isSignedIn } = useAuth();
+  const [pathname, setPathname] = useState(window.location.pathname);
+
+  useEffect(() => {
+    const onPop = () => setPathname(window.location.pathname);
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const isBareRoot =
+    pathname === "/" && !window.location.hash && !window.location.search;
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn && isBareRoot) {
+      window.history.replaceState({}, APP_NAME, "/dashboard");
+      setPathname("/dashboard");
+    }
+  }, [isLoaded, isSignedIn, isBareRoot]);
+
+  if (pathname === "/dashboard") {
+    return <DashboardPage />;
+  }
+  return <>{canvas}</>;
 };
 
 export default ExcalidrawApp;

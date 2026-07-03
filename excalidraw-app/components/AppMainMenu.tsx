@@ -15,7 +15,6 @@ const CLERK_ENABLED = !!import.meta.env.VITE_APP_CLERK_PUBLISHABLE_KEY;
 
 export const AppMainMenu: React.FC<{
   onCollabDialogOpen: () => any;
-  onMyDrawingsOpen: () => any;
   isCollaborating: boolean;
   isCollabEnabled: boolean;
   theme: Theme | "system";
@@ -41,8 +40,11 @@ export const AppMainMenu: React.FC<{
       {CLERK_ENABLED && (
         <>
           <SignedIn>
-            <MainMenu.Item icon={loginIcon} onSelect={() => props.onMyDrawingsOpen()}>
-              My Drawings
+            <MainMenu.Item
+              icon={loginIcon}
+              onSelect={() => window.location.assign("/dashboard")}
+            >
+              Dashboard
             </MainMenu.Item>
             <MainMenu.ItemCustom>
               <UserButton afterSignOutUrl={window.location.origin} />

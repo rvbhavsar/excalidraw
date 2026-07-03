@@ -23,15 +23,50 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
 
 
+class Workspace(Base):
+    """A team workspace, backed 1:1 by a Clerk Organization. Personal (non-org)
+    drawings simply have workspace_id = NULL."""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    clerk_org_id: Mapped[str] = mapped_column(String, unique=True, index=True)
+    name: Mapped[str] = mapped_column(String, default="Workspace")
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
+
+
+class Collection(Base):
+    """A folder for organizing drawings. Belongs to a workspace when shared with
+    a team, or to a single user (owner_id) for a personal folder."""
+
+    __tablename__ = "collections"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), index=True, nullable=True
+    )
+    owner_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True, nullable=True)
+    name: Mapped[str] = mapped_column(String, default="Untitled")
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
 class Drawing(Base):
     __tablename__ = "drawings"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    workspace_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    collection_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("collections.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     title: Mapped[str] = mapped_column(String, default="Untitled")
     elements: Mapped[list] = mapped_column(JSONB, default=list)
     app_state: Mapped[dict] = mapped_column(JSONB, default=dict)
     files: Mapped[dict] = mapped_column(JSONB, default=dict)
+    thumbnail: Mapped[str | None] = mapped_column(String, nullable=True)
     scene_version: Mapped[int] = mapped_column(Integer, default=0)
     is_room_active: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(default=_now)

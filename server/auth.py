@@ -1,4 +1,6 @@
 import os
+import time
+from dataclasses import dataclass
 
 import httpx
 import jwt
@@ -13,6 +15,21 @@ CLERK_JWKS_URL = os.environ["CLERK_JWKS_URL"]
 CLERK_SECRET_KEY = os.environ["CLERK_SECRET_KEY"]
 
 _jwk_client = PyJWKClient(CLERK_JWKS_URL)
+
+# user_id -> (set of clerk org ids, fetched_at epoch). Short TTL so team access
+# reflects membership changes without a Clerk round-trip on every request.
+_ORG_CACHE: dict[str, tuple[set[str], float]] = {}
+_ORG_CACHE_TTL = 60.0
+
+
+@dataclass
+class AuthContext:
+    user_id: str
+    org_id: str | None  # the active organization on the request's token, if any
+
+
+def _extract_org_id(claims: dict) -> str | None:
+    return claims.get("org_id") or (claims.get("o") or {}).get("id")
 
 
 def _decode(token: str) -> dict:
@@ -92,6 +109,69 @@ async def get_current_user_id_optional(
     user_id = claims["sub"]
     await _ensure_user_exists(db, user_id)
     return user_id
+
+
+async def get_current_context(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> AuthContext:
+    token = _extract_token(authorization)
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    try:
+        claims = _decode(token)
+    except jwt.PyJWTError as exc:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
+    user_id = claims["sub"]
+    await _ensure_user_exists(db, user_id)
+    return AuthContext(user_id=user_id, org_id=_extract_org_id(claims))
+
+
+async def get_user_org_ids(user_id: str) -> set[str]:
+    """All Clerk org ids the user belongs to, cached briefly. Used for access
+    control so a user reaches team drawings regardless of their active org."""
+    cached = _ORG_CACHE.get(user_id)
+    if cached and (time.time() - cached[1]) < _ORG_CACHE_TTL:
+        return cached[0]
+    org_ids: set[str] = set()
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://api.clerk.com/v1/users/{user_id}/organization_memberships",
+            headers={"Authorization": f"Bearer {CLERK_SECRET_KEY}"},
+            params={"limit": 100},
+            timeout=5.0,
+        )
+    if response.status_code != 200:
+        # don't cache a failure — that would lock the user out of their own team
+        # drawings for the whole TTL on a single transient Clerk blip
+        return cached[0] if cached else org_ids
+    data = response.json()
+    rows = data.get("data", data) if isinstance(data, dict) else data
+    for row in rows or []:
+        org = row.get("organization") or {}
+        if org.get("id"):
+            org_ids.add(org["id"])
+    _ORG_CACHE[user_id] = (org_ids, time.time())
+    return org_ids
+
+
+def invalidate_org_cache(user_id: str | None = None) -> None:
+    if user_id is None:
+        _ORG_CACHE.clear()
+    else:
+        _ORG_CACHE.pop(user_id, None)
+
+
+async def fetch_org_name(org_id: str) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"https://api.clerk.com/v1/organizations/{org_id}",
+            headers={"Authorization": f"Bearer {CLERK_SECRET_KEY}"},
+            timeout=5.0,
+        )
+    if response.status_code == 200:
+        return response.json().get("name") or "Workspace"
+    return "Workspace"
 
 
 async def verify_socket_token(token: str | None, db: Session) -> str | None:

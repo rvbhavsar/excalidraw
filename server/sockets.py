@@ -1,8 +1,8 @@
 import socketio
 
-from auth import verify_socket_token
+from auth import get_user_org_ids, verify_socket_token
 from db import SessionLocal
-from models import Drawing, RoomMember
+from models import Drawing, RoomMember, Workspace
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
@@ -10,7 +10,7 @@ sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 _connections: dict[str, dict] = {}
 
 
-def _has_access(drawing_id: str, user_id: str) -> bool:
+async def _has_access(drawing_id: str, user_id: str) -> bool:
     db = SessionLocal()
     try:
         drawing = db.get(Drawing, drawing_id)
@@ -23,7 +23,13 @@ def _has_access(drawing_id: str, user_id: str) -> bool:
             .filter(RoomMember.drawing_id == drawing_id, RoomMember.user_id == user_id)
             .first()
         )
-        return member is not None
+        if member is not None:
+            return True
+        if drawing.workspace_id is not None:
+            workspace = db.get(Workspace, drawing.workspace_id)
+            if workspace and workspace.clerk_org_id in await get_user_org_ids(user_id):
+                return True
+        return False
     finally:
         db.close()
 
@@ -66,7 +72,7 @@ async def join_room(sid, room_id):
     conn = _connections.get(sid)
     if not conn:
         return
-    if not _has_access(room_id, conn["user_id"]):
+    if not await _has_access(room_id, conn["user_id"]):
         await sio.emit("error", {"message": "Not authorized for this room"}, to=sid)
         return
 

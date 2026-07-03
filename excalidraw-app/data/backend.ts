@@ -48,6 +48,9 @@ export type DrawingSummary = {
   title: string;
   updated_at: string;
   role: "owner" | "editor" | "viewer";
+  thumbnail: string | null;
+  workspace_id: string | null;
+  collection_id: string | null;
 };
 
 export type DrawingRecord = {
@@ -59,15 +62,32 @@ export type DrawingRecord = {
   scene_version: number;
   is_room_active: boolean;
   role: "owner" | "editor" | "viewer";
+  workspace_id: string | null;
+  collection_id: string | null;
+};
+
+export type Workspace = {
+  id: string;
+  clerk_org_id: string;
+  name: string;
+};
+
+export type CollectionRecord = {
+  id: string;
+  name: string;
+  workspace_id: string | null;
 };
 
 export const listDrawings = (): Promise<DrawingSummary[]> =>
   apiFetch("/api/drawings");
 
-export const createDrawing = (title = "Untitled"): Promise<DrawingRecord> =>
+export const createDrawing = (
+  title = "Untitled",
+  collectionId: string | null = null,
+): Promise<DrawingRecord> =>
   apiFetch("/api/drawings", {
     method: "POST",
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, collection_id: collectionId }),
   });
 
 export const getDrawing = (id: string): Promise<DrawingRecord> =>
@@ -110,6 +130,48 @@ export const removePendingInvite = (id: string, email: string): Promise<void> =>
     method: "DELETE",
   });
 
+export const moveDrawing = (
+  id: string,
+  collectionId: string | null,
+): Promise<DrawingSummary> =>
+  apiFetch(`/api/drawings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ collection_id: collectionId }),
+  });
+
+export const listWorkspaces = (): Promise<Workspace[]> =>
+  apiFetch("/api/workspaces");
+
+export const listCollections = (
+  workspaceId: string | null,
+): Promise<CollectionRecord[]> =>
+  apiFetch(
+    workspaceId
+      ? `/api/collections?workspace_id=${encodeURIComponent(workspaceId)}`
+      : "/api/collections",
+  );
+
+export const createCollection = (
+  name: string,
+  workspaceId: string | null,
+): Promise<CollectionRecord> =>
+  apiFetch("/api/collections", {
+    method: "POST",
+    body: JSON.stringify({ name, workspace_id: workspaceId }),
+  });
+
+export const renameCollection = (
+  id: string,
+  name: string,
+): Promise<CollectionRecord> =>
+  apiFetch(`/api/collections/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
+export const deleteCollection = (id: string): Promise<void> =>
+  apiFetch(`/api/collections/${id}`, { method: "DELETE" });
+
 // in-memory cache of the last scene_version we saved, per drawing id,
 // mirroring FirebaseSceneVersionCache's purpose of skipping redundant saves
 const SceneVersionCache = new Map<string, number>();
@@ -133,6 +195,7 @@ export const saveDrawing = async (
   elements: readonly SyncableExcalidrawElement[],
   appState: Partial<AppState>,
   files: BinaryFiles,
+  thumbnail?: string | null,
 ): Promise<DrawingRecord> => {
   const sceneVersion = getVersion(elements);
   const result: DrawingRecord = await apiFetch(`/api/drawings/${drawingId}`, {
@@ -142,6 +205,7 @@ export const saveDrawing = async (
       app_state: appState,
       files,
       scene_version: sceneVersion,
+      ...(thumbnail ? { thumbnail } : {}),
     }),
   });
   SceneVersionCache.set(drawingId, result.scene_version);

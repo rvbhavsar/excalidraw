@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from svix.webhooks import Webhook, WebhookVerificationError
 
+from auth import invalidate_org_cache
 from db import get_db
-from models import PendingInvite, RoomMember, User
+from models import PendingInvite, RoomMember, User, Workspace
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -69,5 +70,26 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             if user:
                 db.delete(user)
                 db.commit()
+
+    elif event_type in ("organization.created", "organization.updated"):
+        org_id = data["id"]
+        workspace = db.query(Workspace).filter(Workspace.clerk_org_id == org_id).first()
+        if not workspace:
+            workspace = Workspace(clerk_org_id=org_id)
+            db.add(workspace)
+        workspace.name = data.get("name") or "Workspace"
+        db.commit()
+
+    elif event_type == "organization.deleted":
+        org_id = data.get("id")
+        if org_id:
+            workspace = db.query(Workspace).filter(Workspace.clerk_org_id == org_id).first()
+            if workspace:
+                db.delete(workspace)
+                db.commit()
+
+    elif event_type in ("organizationMembership.created", "organizationMembership.deleted"):
+        member_user_id = (data.get("public_user_data") or {}).get("user_id")
+        invalidate_org_cache(member_user_id)
 
     return {"ok": True}
