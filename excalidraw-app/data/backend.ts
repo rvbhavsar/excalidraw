@@ -76,11 +76,27 @@ export const getDrawing = (id: string): Promise<DrawingRecord> =>
 export const deleteDrawing = (id: string): Promise<void> =>
   apiFetch(`/api/drawings/${id}`, { method: "DELETE" });
 
+export const renameDrawing = (id: string, title: string): Promise<DrawingSummary> =>
+  apiFetch(`/api/drawings/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+
+export type Member = {
+  user_id: string | null;
+  email: string;
+  role: "owner" | "editor" | "viewer";
+  pending: boolean;
+};
+
+export const listMembers = (id: string): Promise<Member[]> =>
+  apiFetch(`/api/drawings/${id}/members`);
+
 export const inviteMember = (
   id: string,
   email: string,
   role: "editor" | "viewer" = "editor",
-): Promise<void> =>
+): Promise<{ ok: boolean; pending: boolean }> =>
   apiFetch(`/api/drawings/${id}/members`, {
     method: "POST",
     body: JSON.stringify({ email, role }),
@@ -88,6 +104,11 @@ export const inviteMember = (
 
 export const removeMember = (id: string, userId: string): Promise<void> =>
   apiFetch(`/api/drawings/${id}/members/${userId}`, { method: "DELETE" });
+
+export const removePendingInvite = (id: string, email: string): Promise<void> =>
+  apiFetch(`/api/drawings/${id}/pending-invites/${encodeURIComponent(email)}`, {
+    method: "DELETE",
+  });
 
 // in-memory cache of the last scene_version we saved, per drawing id,
 // mirroring FirebaseSceneVersionCache's purpose of skipping redundant saves

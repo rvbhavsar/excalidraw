@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from svix.webhooks import Webhook, WebhookVerificationError
 
 from db import get_db
-from models import User
+from models import PendingInvite, RoomMember, User
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
@@ -31,13 +31,37 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
             emails[0]["email_address"] if emails else None,
         )
         user = db.get(User, user_id)
+        is_new = user is None
         if not user:
             user = User(id=user_id)
             db.add(user)
-        user.email = primary_email
+        user.email = primary_email.strip().lower() if primary_email else None
         user.username = data.get("username") or data.get("first_name")
         user.avatar_url = data.get("image_url")
         db.commit()
+
+        # convert any pending-by-email invites into real room memberships
+        if is_new and primary_email:
+            email = primary_email.strip().lower()
+            pending = db.query(PendingInvite).filter(PendingInvite.email == email).all()
+            for invite in pending:
+                existing = (
+                    db.query(RoomMember)
+                    .filter(
+                        RoomMember.drawing_id == invite.drawing_id,
+                        RoomMember.user_id == user_id,
+                    )
+                    .first()
+                )
+                if not existing:
+                    db.add(
+                        RoomMember(
+                            drawing_id=invite.drawing_id, user_id=user_id, role=invite.role
+                        )
+                    )
+                db.delete(invite)
+            if pending:
+                db.commit()
     elif event_type == "user.deleted":
         user_id = data.get("id")
         if user_id:

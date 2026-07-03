@@ -21,7 +21,13 @@ import { useEffect, useRef, useState } from "react";
 import { atom, useAtom, useAtomValue } from "../app-jotai";
 import { activeRoomLinkAtom } from "../collab/Collab";
 import { getCollaborationLinkData } from "../data";
-import { inviteMember } from "../data/backend";
+import {
+  inviteMember,
+  listMembers,
+  removeMember,
+  removePendingInvite,
+  type Member,
+} from "../data/backend";
 
 import "./ShareDialog.scss";
 import { QRCode } from "./QRCode";
@@ -73,16 +79,48 @@ const ActiveRoomDialog = ({
   const { onCopy, copyStatus } = useCopyStatus();
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const [members, setMembers] = useState<Member[] | null>(null);
   const roomId = getCollaborationLinkData(activeRoomLink)?.roomId ?? null;
+
+  const refreshMembers = () => {
+    if (roomId) {
+      listMembers(roomId)
+        .then(setMembers)
+        .catch((error: any) => setInviteStatus(error.message));
+    }
+  };
+
+  useEffect(refreshMembers, [roomId]);
 
   const handleInvite = async () => {
     if (!roomId || !inviteEmail) {
       return;
     }
     try {
-      await inviteMember(roomId, inviteEmail);
-      setInviteStatus(`Invited ${inviteEmail}`);
+      const result = await inviteMember(roomId, inviteEmail);
+      setInviteStatus(
+        result.pending
+          ? `${inviteEmail} doesn't have an account yet — they'll get access as soon as they sign up`
+          : `Invited ${inviteEmail}`,
+      );
       setInviteEmail("");
+      refreshMembers();
+    } catch (error: any) {
+      setInviteStatus(error.message);
+    }
+  };
+
+  const handleRemove = async (member: Member) => {
+    if (!roomId) {
+      return;
+    }
+    try {
+      if (member.pending) {
+        await removePendingInvite(roomId, member.email);
+      } else if (member.user_id) {
+        await removeMember(roomId, member.user_id);
+      }
+      refreshMembers();
     } catch (error: any) {
       setInviteStatus(error.message);
     }
@@ -177,6 +215,29 @@ const ActiveRoomDialog = ({
       {inviteStatus && (
         <div className="ShareDialog__active__description">
           <p>{inviteStatus}</p>
+        </div>
+      )}
+      {members && members.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+          {members.map((m) => (
+            <div
+              key={m.user_id ?? m.email}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                fontSize: "0.85rem",
+              }}
+            >
+              <span>
+                {m.email} — {m.role}
+                {m.pending ? " (pending sign-up)" : ""}
+              </span>
+              {m.role !== "owner" && (
+                <button onClick={() => handleRemove(m)}>Remove</button>
+              )}
+            </div>
+          ))}
         </div>
       )}
       <div className="ShareDialog__active__description">

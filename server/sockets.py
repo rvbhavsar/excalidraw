@@ -31,7 +31,11 @@ def _has_access(drawing_id: str, user_id: str) -> bool:
 @sio.event
 async def connect(sid, environ, auth):
     token = (auth or {}).get("token")
-    user_id = verify_socket_token(token)
+    db = SessionLocal()
+    try:
+        user_id = await verify_socket_token(token, db)
+    finally:
+        db.close()
     if not user_id:
         raise socketio.exceptions.ConnectionRefusedError("Invalid or missing auth token")
     _connections[sid] = {"user_id": user_id, "room_id": None, "username": (auth or {}).get("username", "Anonymous")}

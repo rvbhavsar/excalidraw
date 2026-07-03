@@ -40,6 +40,9 @@ class Drawing(Base):
     members: Mapped[list["RoomMember"]] = relationship(
         back_populates="drawing", cascade="all, delete-orphan"
     )
+    pending_invites: Mapped[list["PendingInvite"]] = relationship(
+        back_populates="drawing", cascade="all, delete-orphan"
+    )
 
 
 class RoomMember(Base):
@@ -53,3 +56,19 @@ class RoomMember(Base):
     invited_at: Mapped[datetime] = mapped_column(default=_now)
 
     drawing: Mapped["Drawing"] = relationship(back_populates="members")
+
+
+class PendingInvite(Base):
+    """An invite by email for someone who hasn't signed up yet. Converted into
+    a RoomMember automatically the first time they sign in (see webhooks.py)."""
+
+    __tablename__ = "pending_invites"
+
+    drawing_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("drawings.id"), primary_key=True
+    )
+    email: Mapped[str] = mapped_column(String, primary_key=True, index=True)
+    role: Mapped[str] = mapped_column(String, default="editor")
+    invited_at: Mapped[datetime] = mapped_column(default=_now)
+
+    drawing: Mapped["Drawing"] = relationship(back_populates="pending_invites")
