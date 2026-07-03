@@ -315,8 +315,8 @@ const DashboardShell = () => {
             </button>
           </div>
           <button
-            className={`aix-collection ${
-              activeCollectionId === null ? "aix-collection--active" : ""
+            className={`aix-nav__item ${
+              activeCollectionId === null ? "aix-nav__item--active" : ""
             }`}
             onClick={() => setActiveCollectionId(null)}
           >

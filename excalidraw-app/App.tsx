@@ -974,26 +974,33 @@ const ExcalidrawWrapper = () => {
         "is-collaborating": isCollaborating,
       })}
     >
-      {CLERK_PUBLISHABLE_KEY ? (
-        <a
-          href="/dashboard"
-          className="aix-app-logo aix-app-logo--link"
-          title="Back to dashboard"
-        >
+      <div className="aix-topbar">
+        {CLERK_PUBLISHABLE_KEY ? (
+          <a
+            href="/dashboard"
+            className="aix-app-logo aix-app-logo--link"
+            title="Back to dashboard"
+          >
+            <img
+              src={
+                editorTheme === "dark" ? "/aix-logo-dark.png" : "/aix-logo.png"
+              }
+              alt="AIX — back to dashboard"
+              draggable={false}
+            />
+          </a>
+        ) : (
           <img
             src={editorTheme === "dark" ? "/aix-logo-dark.png" : "/aix-logo.png"}
-            alt="AIX — back to dashboard"
+            alt="AIX"
+            className="aix-app-logo"
             draggable={false}
           />
-        </a>
-      ) : (
-        <img
-          src={editorTheme === "dark" ? "/aix-logo-dark.png" : "/aix-logo.png"}
-          alt="AIX"
-          className="aix-app-logo"
-          draggable={false}
-        />
-      )}
+        )}
+        {CLERK_PUBLISHABLE_KEY && (
+          <DrawingTitle excalidrawAPI={excalidrawAPI} />
+        )}
+      </div>
       <Excalidraw
         onChange={onChange}
         onExport={onExport}
@@ -1272,6 +1279,65 @@ const ExcalidrawWrapper = () => {
         )}
       </Excalidraw>
     </div>
+  );
+};
+
+/** Editable name for the open drawing, shown next to the logo. Writes to
+ * appState.name (Excalidraw's scene name), which the debounced save pushes to
+ * drawing.title — so the dashboard card and the editor stay in sync. */
+const DrawingTitle = ({
+  excalidrawAPI,
+}: {
+  excalidrawAPI: ExcalidrawImperativeAPI | null;
+}) => {
+  const drawingId = useAtomValue(currentDrawingIdAtom);
+  const [name, setName] = useState("");
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (excalidrawAPI && drawingId) {
+      setName(excalidrawAPI.getAppState().name || "Untitled");
+    }
+  }, [excalidrawAPI, drawingId]);
+
+  if (!drawingId || !excalidrawAPI) {
+    return null;
+  }
+
+  const commit = () => {
+    setEditing(false);
+    const trimmed = name.trim() || "Untitled";
+    setName(trimmed);
+    excalidrawAPI.updateScene({
+      appState: { name: trimmed },
+      captureUpdate: CaptureUpdateAction.NEVER,
+    });
+  };
+
+  return editing ? (
+    <input
+      className="aix-drawing-title__input"
+      autoFocus
+      value={name}
+      onChange={(event) => setName(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          commit();
+        } else if (event.key === "Escape") {
+          setName(excalidrawAPI.getAppState().name || "Untitled");
+          setEditing(false);
+        }
+      }}
+    />
+  ) : (
+    <button
+      className="aix-drawing-title"
+      onClick={() => setEditing(true)}
+      title="Rename drawing"
+    >
+      {name || "Untitled"}
+    </button>
   );
 };
 

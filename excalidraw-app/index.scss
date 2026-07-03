@@ -119,21 +119,28 @@
   }
 }
 
-.aix-app-logo {
+.aix-topbar {
   position: absolute;
   // vertically centered against the 2.25rem-tall hamburger button, which
   // sits at top: 1rem (--editor-container-padding, --lg-button-size)
   top: calc(1rem + (2.25rem - 1.75rem) / 2);
   left: calc(1rem + 2.25rem + 0.75rem);
-  height: 1.75rem;
-  width: auto;
   z-index: 3;
-  pointer-events: none;
-  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 40vw;
 
   @media (max-width: 640px) {
     display: none;
   }
+}
+
+.aix-app-logo {
+  height: 1.75rem;
+  width: auto;
+  pointer-events: none;
+  user-select: none;
 
   &--link {
     display: flex;
@@ -146,6 +153,39 @@
       width: auto;
       user-select: none;
     }
+  }
+}
+
+.aix-drawing-title {
+  pointer-events: auto;
+  max-width: 28vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  cursor: text;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-family: var(--ui-font);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-on-surface, #1b1b1f);
+
+  &:hover {
+    background: var(--button-hover-bg, rgba(0, 0, 0, 0.06));
+  }
+
+  &__input {
+    pointer-events: auto;
+    padding: 4px 8px;
+    border: 1px solid #ec7200;
+    border-radius: 8px;
+    font-family: var(--ui-font);
+    font-size: 0.9375rem;
+    font-weight: 600;
+    width: 16rem;
+    max-width: 28vw;
   }
 }
 

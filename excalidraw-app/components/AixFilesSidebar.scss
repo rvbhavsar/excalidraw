@@ -2,11 +2,17 @@ $aix-orange: #ec7200;
 
 .aix-files-trigger {
   position: fixed;
-  top: 14px;
-  left: 132px;
+  // stacked directly under the hamburger (top:1rem, 2.25rem tall) so it never
+  // collides with the AIX logo/title that sit to the hamburger's right
+  top: calc(1rem + 2.25rem + 0.5rem);
+  left: 1rem;
   z-index: 5;
-  width: 36px;
-  height: 36px;
+  width: 2.25rem;
+  height: 2.25rem;
+
+  @media (max-width: 640px) {
+    display: none;
+  }
   display: flex;
   align-items: center;
   justify-content: center;
