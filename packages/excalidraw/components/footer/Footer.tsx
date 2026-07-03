@@ -1,8 +1,9 @@
 import clsx from "clsx";
 
-import { actionShortcuts } from "../../actions";
+import { actionShortcuts, actionToggleTheme } from "../../actions";
 import { useTunnels } from "../../context/tunnels";
 import { ExitZenModeButton, UndoRedoActions, ZoomActions } from "../Actions";
+import { DarkModeToggle } from "../DarkModeToggle";
 import { HelpButton } from "../HelpButton";
 import { Section } from "../Section";
 import Stack from "../Stack";
@@ -36,11 +37,6 @@ const Footer = ({
       >
         <Stack.Col gap={2}>
           <Section heading="canvasActions">
-            <ZoomActions
-              renderAction={actionManager.renderAction}
-              zoom={appState.zoom}
-            />
-
             {!appState.viewModeEnabled && (
               <UndoRedoActions
                 renderAction={actionManager.renderAction}
@@ -59,8 +55,18 @@ const Footer = ({
           "transition-right": appState.zenModeEnabled,
         })}
       >
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", display: "flex", gap: "0.5rem" }}>
           {renderWelcomeScreen && <WelcomeScreenHelpHintTunnel.Out />}
+          <ZoomActions
+            renderAction={actionManager.renderAction}
+            zoom={appState.zoom}
+          />
+          {actionManager.isActionEnabled(actionToggleTheme) && (
+            <DarkModeToggle
+              value={appState.theme}
+              onChange={() => actionManager.executeAction(actionToggleTheme)}
+            />
+          )}
           <HelpButton
             onClick={() => actionManager.executeAction(actionShortcuts)}
           />
