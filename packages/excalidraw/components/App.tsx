@@ -704,11 +704,6 @@ class App extends React.Component<AppProps, AppState> {
   /** previous frame pointer coords */
   previousPointerMoveCoords: { x: number; y: number } | null = null;
   lastViewportPosition = { x: 0, y: 0 };
-  // AIXDraw right-drag-to-pan: while a right-button press is being tracked, the
-  // native mouse context menu is suppressed and re-issued from pointerup only
-  // if no drag occurred (see handleCanvasPanUsingRightDrag).
-  private rightPanTracking = false;
-  private showContextMenuFromPointerUp = false;
 
   laserTrails = new LaserTrails(this);
   eraserTrail = new EraserTrail(this);
@@ -8280,7 +8275,6 @@ class App extends React.Component<AppProps, AppState> {
     let lastX = startX;
     let lastY = startY;
     let panning = false;
-    this.rightPanTracking = true;
     this.focusContainer();
 
     const onPointerMove = withBatchedUpdatesThrottled((ev: PointerEvent) => {
@@ -8306,24 +8300,11 @@ class App extends React.Component<AppProps, AppState> {
       (lastPointerUp = () => {
         lastPointerUp = null;
         isPanning = false;
-        this.rightPanTracking = false;
         setCursorForShape(this.interactiveCanvas, this.state);
         window.removeEventListener(EVENT.POINTER_MOVE, onPointerMove);
         window.removeEventListener(EVENT.POINTER_UP, teardown);
         window.removeEventListener(EVENT.BLUR, teardown);
         onPointerMove.flush();
-        if (!panning) {
-          // no drag → a plain right-click: open the context menu here
-          this.showContextMenuFromPointerUp = true;
-          this.handleCanvasContextMenu({
-            preventDefault: () => {},
-            nativeEvent: event,
-            button: POINTER_BUTTON.SECONDARY,
-            clientX: startX,
-            clientY: startY,
-          } as unknown as React.MouseEvent<HTMLElement | HTMLCanvasElement>);
-          this.showContextMenuFromPointerUp = false;
-        }
       }),
     );
     window.addEventListener(EVENT.BLUR, teardown);
@@ -12278,20 +12259,13 @@ class App extends React.Component<AppProps, AppState> {
   ) => {
     event.preventDefault();
 
-    // AIXDraw: a right-button press pans on drag. Suppress the native mouse
-    // context menu while that press is being tracked; it's re-issued from
-    // pointerup (with showContextMenuFromPointerUp) only when no drag occurred.
+    // AIXDraw: the right mouse button pans the canvas, so the mouse context
+    // menu is disabled. Touch/pen long-press menus are left intact.
     const nativePointerType =
       event.nativeEvent && "pointerType" in event.nativeEvent
         ? (event.nativeEvent as PointerEvent).pointerType
         : "mouse";
-    const isMouseContextMenu =
-      nativePointerType !== "touch" && nativePointerType !== "pen";
-    if (
-      isMouseContextMenu &&
-      this.rightPanTracking &&
-      !this.showContextMenuFromPointerUp
-    ) {
+    if (nativePointerType !== "touch" && nativePointerType !== "pen") {
       return;
     }
 
