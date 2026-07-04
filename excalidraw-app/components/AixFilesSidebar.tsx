@@ -1,11 +1,13 @@
 import { Sidebar } from "@excalidraw/excalidraw";
-import { useEffect, useState } from "react";
+import { useOrganization } from "@clerk/clerk-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAtomValue } from "../app-jotai";
 
 import {
   currentDrawingIdAtom,
   listDrawings,
+  listWorkspaces,
   type DrawingSummary,
 } from "../data/backend";
 
@@ -19,25 +21,52 @@ export const AixFilesSidebar: React.FC<{
   excalidrawAPI: ExcalidrawImperativeAPI | null;
 }> = ({ excalidrawAPI }) => {
   const currentDrawingId = useAtomValue(currentDrawingIdAtom);
+  const { organization } = useOrganization();
+  const orgId = organization?.id ?? null;
   const [drawings, setDrawings] = useState<DrawingSummary[] | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!open || drawings) {
       return;
     }
-    listDrawings()
-      .then((items) =>
+    // resolve the active Clerk org -> our workspace, then show only that
+    // workspace's drawings (personal when no active org), matching the dashboard
+    const load = async () => {
+      let wsId: string | null = null;
+      if (orgId) {
+        try {
+          const wss = await listWorkspaces();
+          wsId = wss.find((w) => w.clerk_org_id === orgId)?.id ?? null;
+        } catch {
+          wsId = null;
+        }
+      }
+      setWorkspaceId(wsId);
+      try {
+        const items = await listDrawings();
         setDrawings(
           [...items].sort(
             (a, b) =>
               new Date(b.updated_at).getTime() -
               new Date(a.updated_at).getTime(),
           ),
-        ),
-      )
-      .catch(() => setDrawings([]));
-  }, [open, drawings]);
+        );
+      } catch {
+        setDrawings([]);
+      }
+    };
+    load();
+  }, [open, drawings, orgId]);
+
+  const scopedDrawings = useMemo(
+    () =>
+      (drawings ?? []).filter((d) =>
+        workspaceId ? d.workspace_id === workspaceId : d.workspace_id === null,
+      ),
+    [drawings, workspaceId],
+  );
 
   const toggle = () => {
     const next = !open;
@@ -88,10 +117,10 @@ export const AixFilesSidebar: React.FC<{
         <div className="aix-files__list">
           {drawings === null ? (
             <div className="aix-files__empty">Loading…</div>
-          ) : drawings.length === 0 ? (
+          ) : scopedDrawings.length === 0 ? (
             <div className="aix-files__empty">No drawings yet.</div>
           ) : (
-            drawings.map((d) => (
+            scopedDrawings.map((d) => (
               <button
                 key={d.id}
                 className={`aix-files__item ${
