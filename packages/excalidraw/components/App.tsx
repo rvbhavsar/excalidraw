@@ -704,6 +704,11 @@ class App extends React.Component<AppProps, AppState> {
   /** previous frame pointer coords */
   previousPointerMoveCoords: { x: number; y: number } | null = null;
   lastViewportPosition = { x: 0, y: 0 };
+  // AIXDraw right-drag-to-pan: while a right-button press is being tracked, the
+  // native mouse context menu is suppressed and re-issued from pointerup only
+  // if no drag occurred (see handleCanvasPanUsingRightDrag).
+  private rightPanTracking = false;
+  private showContextMenuFromPointerUp = false;
 
   laserTrails = new LaserTrails(this);
   eraserTrail = new EraserTrail(this);
@@ -8136,6 +8141,19 @@ class App extends React.Component<AppProps, AppState> {
   public handleCanvasPanUsingWheelOrSpaceDrag = (
     event: React.PointerEvent<HTMLElement> | MouseEvent,
   ): boolean => {
+    // AIXDraw: right-button drag pans the canvas (hand gesture). Handled
+    // separately so we can defer committing to a pan until the pointer moves,
+    // leaving a plain right-click free to open the context menu.
+    if (
+      event.button === POINTER_BUTTON.SECONDARY &&
+      gesture.pointers.size <= 1 &&
+      !this.state.editingTextElement &&
+      (event as PointerEvent).pointerType !== "touch" &&
+      (event as PointerEvent).pointerType !== "pen"
+    ) {
+      return this.handleCanvasPanUsingRightDrag(event);
+    }
+
     if (
       !(
         gesture.pointers.size <= 1 &&
@@ -8244,6 +8262,72 @@ class App extends React.Component<AppProps, AppState> {
     window.addEventListener(EVENT.POINTER_MOVE, onPointerMove, {
       passive: true,
     });
+    window.addEventListener(EVENT.POINTER_UP, teardown);
+    return true;
+  };
+
+  // AIXDraw: right-button drag pans. We only commit to panning once the pointer
+  // moves past a small threshold; if it never moves, the release is treated as
+  // a plain right-click and opens the context menu (the native mouse context
+  // menu is suppressed in handleCanvasContextMenu while this is tracking, so it
+  // works consistently regardless of whether the browser fires `contextmenu`
+  // on mousedown (Chrome/macOS) or mouseup).
+  private handleCanvasPanUsingRightDrag = (
+    event: React.PointerEvent<HTMLElement> | MouseEvent,
+  ): boolean => {
+    const startX = event.clientX;
+    const startY = event.clientY;
+    let lastX = startX;
+    let lastY = startY;
+    let panning = false;
+    this.rightPanTracking = true;
+    this.focusContainer();
+
+    const onPointerMove = withBatchedUpdatesThrottled((ev: PointerEvent) => {
+      if (!panning) {
+        if (Math.abs(ev.clientX - startX) <= 3 && Math.abs(ev.clientY - startY) <= 3) {
+          return;
+        }
+        panning = true;
+        isPanning = true;
+        setCursor(this.interactiveCanvas, CURSOR_TYPE.GRABBING);
+      }
+      const deltaX = lastX - ev.clientX;
+      const deltaY = lastY - ev.clientY;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      this.translateCanvas((state) => ({
+        scrollX: state.scrollX - deltaX / state.zoom.value,
+        scrollY: state.scrollY - deltaY / state.zoom.value,
+      }));
+    });
+
+    const teardown = withBatchedUpdates(
+      (lastPointerUp = () => {
+        lastPointerUp = null;
+        isPanning = false;
+        this.rightPanTracking = false;
+        setCursorForShape(this.interactiveCanvas, this.state);
+        window.removeEventListener(EVENT.POINTER_MOVE, onPointerMove);
+        window.removeEventListener(EVENT.POINTER_UP, teardown);
+        window.removeEventListener(EVENT.BLUR, teardown);
+        onPointerMove.flush();
+        if (!panning) {
+          // no drag → a plain right-click: open the context menu here
+          this.showContextMenuFromPointerUp = true;
+          this.handleCanvasContextMenu({
+            preventDefault: () => {},
+            nativeEvent: event,
+            button: POINTER_BUTTON.SECONDARY,
+            clientX: startX,
+            clientY: startY,
+          } as unknown as React.MouseEvent<HTMLElement | HTMLCanvasElement>);
+          this.showContextMenuFromPointerUp = false;
+        }
+      }),
+    );
+    window.addEventListener(EVENT.BLUR, teardown);
+    window.addEventListener(EVENT.POINTER_MOVE, onPointerMove, { passive: true });
     window.addEventListener(EVENT.POINTER_UP, teardown);
     return true;
   };
@@ -12194,6 +12278,23 @@ class App extends React.Component<AppProps, AppState> {
   ) => {
     event.preventDefault();
 
+    // AIXDraw: a right-button press pans on drag. Suppress the native mouse
+    // context menu while that press is being tracked; it's re-issued from
+    // pointerup (with showContextMenuFromPointerUp) only when no drag occurred.
+    const nativePointerType =
+      event.nativeEvent && "pointerType" in event.nativeEvent
+        ? (event.nativeEvent as PointerEvent).pointerType
+        : "mouse";
+    const isMouseContextMenu =
+      nativePointerType !== "touch" && nativePointerType !== "pen";
+    if (
+      isMouseContextMenu &&
+      this.rightPanTracking &&
+      !this.showContextMenuFromPointerUp
+    ) {
+      return;
+    }
+
     if (
       (("pointerType" in event.nativeEvent &&
         event.nativeEvent.pointerType === "touch") ||
@@ -12732,40 +12833,8 @@ class App extends React.Component<AppProps, AppState> {
       }
 
       const { deltaX, deltaY } = event;
-      // note that event.ctrlKey is necessary to handle pinch zooming
-      if (event.metaKey || event.ctrlKey) {
-        const sign = Math.sign(deltaY);
-        const MAX_STEP = ZOOM_STEP * 100;
-        const absDelta = Math.abs(deltaY);
-        let delta = deltaY;
-        if (absDelta > MAX_STEP) {
-          delta = MAX_STEP * sign;
-        }
 
-        let newZoom = this.state.zoom.value - delta / 100;
-        // increase zoom steps the more zoomed-in we are (applies to >100% only)
-        newZoom +=
-          Math.log10(Math.max(1, this.state.zoom.value)) *
-          -sign *
-          // reduced amplification for small deltas (small movements on a trackpad)
-          Math.min(1, absDelta / 20);
-
-        this.translateCanvas((state) => ({
-          ...getStateForZoom(
-            {
-              viewportX: this.lastViewportPosition.x,
-              viewportY: this.lastViewportPosition.y,
-              nextZoom: getNormalizedZoom(newZoom),
-            },
-            state,
-          ),
-          shouldCacheIgnoreZoom: true,
-        }));
-        this.resetShouldCacheIgnoreZoomDebounced();
-        return;
-      }
-
-      // scroll horizontally when shift pressed
+      // scroll horizontally when shift pressed (panning affordance)
       if (event.shiftKey) {
         this.translateCanvas(({ zoom, scrollX }) => ({
           // on Mac, shift+wheel tends to result in deltaX
@@ -12774,10 +12843,37 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
-      this.translateCanvas(({ zoom, scrollX, scrollY }) => ({
-        scrollX: scrollX - deltaX / zoom.value,
-        scrollY: scrollY - deltaY / zoom.value,
+      // AIXDraw: the wheel zooms (scroll up = zoom in, down = out); pinch
+      // (arrives as ctrlKey) lands here too. Panning is done with right-drag,
+      // space-drag, or the hand tool.
+      const sign = Math.sign(deltaY);
+      const MAX_STEP = ZOOM_STEP * 100;
+      const absDelta = Math.abs(deltaY);
+      let delta = deltaY;
+      if (absDelta > MAX_STEP) {
+        delta = MAX_STEP * sign;
+      }
+
+      let newZoom = this.state.zoom.value - delta / 100;
+      // increase zoom steps the more zoomed-in we are (applies to >100% only)
+      newZoom +=
+        Math.log10(Math.max(1, this.state.zoom.value)) *
+        -sign *
+        // reduced amplification for small deltas (small movements on a trackpad)
+        Math.min(1, absDelta / 20);
+
+      this.translateCanvas((state) => ({
+        ...getStateForZoom(
+          {
+            viewportX: this.lastViewportPosition.x,
+            viewportY: this.lastViewportPosition.y,
+            nextZoom: getNormalizedZoom(newZoom),
+          },
+          state,
+        ),
+        shouldCacheIgnoreZoom: true,
       }));
+      this.resetShouldCacheIgnoreZoomDebounced();
     },
   );
 
