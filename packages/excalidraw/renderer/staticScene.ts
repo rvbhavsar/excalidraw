@@ -44,13 +44,15 @@ import type {
 import type { StaticCanvasAppState, Zoom } from "../types";
 
 const GridLineColor = {
+  // ~50% lighter than Excalidraw's default (#dddddd / #e5e5e5) — blended
+  // halfway toward the canvas background for a more subtle grid
   [THEME.LIGHT]: {
-    bold: "#dddddd",
-    regular: "#e5e5e5",
+    bold: "#eeeeee",
+    regular: "#f2f2f2",
   },
   [THEME.DARK]: {
-    bold: applyDarkModeFilter("#dddddd"),
-    regular: applyDarkModeFilter("#e5e5e5"),
+    bold: applyDarkModeFilter("#eeeeee"),
+    regular: applyDarkModeFilter("#f2f2f2"),
   },
 } as const;
 
