@@ -7,7 +7,7 @@ import {
   useOrganization,
   useUser,
 } from "@clerk/clerk-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createCollection,
@@ -64,6 +64,21 @@ const DrawingCard = ({
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(drawing.title || "Untitled");
   const canEdit = drawing.role === "owner" || drawing.role === "editor";
+  const actionsRef = useRef<HTMLDivElement>(null);
+
+  // close the ⋯ menu on any click outside it (the kebab itself still toggles)
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const onDown = (event: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuOpen]);
 
   const commitRename = async () => {
     setRenaming(false);
@@ -118,7 +133,7 @@ const DrawingCard = ({
           <div className="aix-card__role">{drawing.role}</div>
         </div>
         {canEdit && (
-          <div className="aix-card__actions">
+          <div className="aix-card__actions" ref={actionsRef}>
             <button
               className="aix-kebab"
               onClick={() => setMenuOpen((v) => !v)}
@@ -128,10 +143,6 @@ const DrawingCard = ({
             </button>
             {menuOpen && (
               <>
-                <div
-                  className="aix-menu__backdrop"
-                  onClick={() => setMenuOpen(false)}
-                />
                 <div className="aix-menu">
                   <button
                     onClick={() => {

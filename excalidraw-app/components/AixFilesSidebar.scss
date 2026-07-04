@@ -116,3 +116,33 @@ $aix-orange: #ec7200;
     text-transform: capitalize;
   }
 }
+
+// higher-contrast treatment in Excalidraw's dark theme
+.excalidraw.theme--dark {
+  .aix-files__dashboard {
+    background: rgba($aix-orange, 0.22);
+    color: #ff9d52;
+
+    &:hover {
+      background: rgba($aix-orange, 0.32);
+    }
+  }
+
+  .aix-files__item {
+    &:hover {
+      background: rgba(255, 255, 255, 0.07);
+    }
+
+    &--active {
+      background: rgba($aix-orange, 0.24);
+    }
+  }
+
+  .aix-files__thumb {
+    background-color: #2b2b30;
+  }
+
+  .aix-files__role {
+    color: #a6a6b0;
+  }
+}
