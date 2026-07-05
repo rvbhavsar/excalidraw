@@ -5,22 +5,25 @@ import { useTunnels } from "../../context/tunnels";
 import { ExitZenModeButton, UndoRedoActions, ZoomActions } from "../Actions";
 import { DarkModeToggle } from "../DarkModeToggle";
 import { HelpButton } from "../HelpButton";
+import { InputDeviceToggle } from "../InputDeviceToggle";
 import { Section } from "../Section";
 import Stack from "../Stack";
 
 import type { ActionManager } from "../../actions/manager";
-import type { UIAppState } from "../../types";
+import type { AppState, UIAppState } from "../../types";
 
 const Footer = ({
   appState,
   actionManager,
   showExitZenModeBtn,
   renderWelcomeScreen,
+  setAppState,
 }: {
   appState: UIAppState;
   actionManager: ActionManager;
   showExitZenModeBtn: boolean;
   renderWelcomeScreen: boolean;
+  setAppState: React.Component<any, AppState>["setState"];
 }) => {
   const { FooterCenterTunnel, WelcomeScreenHelpHintTunnel } = useTunnels();
 
@@ -35,7 +38,7 @@ const Footer = ({
             appState.zenModeEnabled,
         })}
       >
-        <Stack.Col gap={2}>
+        <Stack.Row gap={2} align="center">
           <Section heading="canvasActions">
             {!appState.viewModeEnabled && (
               <UndoRedoActions
@@ -47,7 +50,13 @@ const Footer = ({
               />
             )}
           </Section>
-        </Stack.Col>
+          {!appState.viewModeEnabled && !appState.zenModeEnabled && (
+            <InputDeviceToggle
+              mode={appState.inputDeviceMode}
+              onChange={(inputDeviceMode) => setAppState({ inputDeviceMode })}
+            />
+          )}
+        </Stack.Row>
       </div>
       <FooterCenterTunnel.Out />
       <div

@@ -485,6 +485,10 @@ export interface AppState {
   // a drag operation (like pointer position vs bindable element) but needed
   // globally for calculating the binding strategy
   bindMode: BindMode;
+  // AIXDraw: which pointer device the canvas navigation is tuned for.
+  // "auto" classifies each wheel gesture (mouse wheel zooms, two-finger
+  // trackpad scroll pans); "mouse"/"trackpad" force one scheme.
+  inputDeviceMode: "auto" | "mouse" | "trackpad";
 }
 
 export type SearchMatch = {

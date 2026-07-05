@@ -625,6 +625,7 @@ const LayerUI = ({
               actionManager={actionManager}
               showExitZenModeBtn={showExitZenModeBtn}
               renderWelcomeScreen={renderWelcomeScreen}
+              setAppState={setAppState}
             />
             {(appState.toast || appState.scrolledOutside) && (
               <div className="floating-status-stack">

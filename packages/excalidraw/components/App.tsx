@@ -709,6 +709,10 @@ class App extends React.Component<AppProps, AppState> {
   // if no drag occurred (see handleCanvasPanUsingRightDrag).
   private rightPanTracking = false;
   private showContextMenuFromPointerUp = false;
+  // AIXDraw input-device classifier: timestamp of the last wheel event that
+  // carried a clear trackpad signal, used to keep the momentum tail of a
+  // two-finger gesture classified as trackpad (see classifyWheelDevice).
+  private lastTrackpadWheelTimestamp = 0;
 
   laserTrails = new LaserTrails(this);
   eraserTrail = new EraserTrail(this);
@@ -12843,39 +12847,93 @@ class App extends React.Component<AppProps, AppState> {
         return;
       }
 
-      // AIXDraw: the wheel zooms (scroll up = zoom in, down = out); pinch
-      // (arrives as ctrlKey) lands here too. Panning is done with right-drag,
-      // space-drag, or the hand tool.
-      const sign = Math.sign(deltaY);
-      const MAX_STEP = ZOOM_STEP * 100;
-      const absDelta = Math.abs(deltaY);
-      let delta = deltaY;
-      if (absDelta > MAX_STEP) {
-        delta = MAX_STEP * sign;
+      // AIXDraw: mouse and trackpad use different navigation schemes. On a
+      // mouse the wheel zooms (power controls, panning via right-drag); on a
+      // trackpad two-finger scroll pans and pinch (ctrlKey wheel) zooms — the
+      // native Excalidraw behavior. `inputDeviceMode` forces one scheme; "auto"
+      // classifies each gesture.
+      const mode = this.state.inputDeviceMode;
+      const device =
+        mode === "auto" ? this.classifyWheelDevice(event) : mode;
+
+      const zoomFromWheel = () => {
+        const sign = Math.sign(deltaY);
+        const MAX_STEP = ZOOM_STEP * 100;
+        const absDelta = Math.abs(deltaY);
+        let delta = deltaY;
+        if (absDelta > MAX_STEP) {
+          delta = MAX_STEP * sign;
+        }
+
+        let newZoom = this.state.zoom.value - delta / 100;
+        // increase zoom steps the more zoomed-in we are (applies to >100% only)
+        newZoom +=
+          Math.log10(Math.max(1, this.state.zoom.value)) *
+          -sign *
+          // reduced amplification for small deltas (small trackpad movements)
+          Math.min(1, absDelta / 20);
+
+        this.translateCanvas((state) => ({
+          ...getStateForZoom(
+            {
+              viewportX: this.lastViewportPosition.x,
+              viewportY: this.lastViewportPosition.y,
+              nextZoom: getNormalizedZoom(newZoom),
+            },
+            state,
+          ),
+          shouldCacheIgnoreZoom: true,
+        }));
+        this.resetShouldCacheIgnoreZoomDebounced();
+      };
+
+      if (device === "trackpad") {
+        // pinch (arrives as ctrlKey/metaKey wheel) zooms; two-finger drag pans
+        if (event.metaKey || event.ctrlKey) {
+          zoomFromWheel();
+          return;
+        }
+        this.translateCanvas(({ zoom, scrollX, scrollY }) => ({
+          scrollX: scrollX - deltaX / zoom.value,
+          scrollY: scrollY - deltaY / zoom.value,
+        }));
+        return;
       }
 
-      let newZoom = this.state.zoom.value - delta / 100;
-      // increase zoom steps the more zoomed-in we are (applies to >100% only)
-      newZoom +=
-        Math.log10(Math.max(1, this.state.zoom.value)) *
-        -sign *
-        // reduced amplification for small deltas (small movements on a trackpad)
-        Math.min(1, absDelta / 20);
-
-      this.translateCanvas((state) => ({
-        ...getStateForZoom(
-          {
-            viewportX: this.lastViewportPosition.x,
-            viewportY: this.lastViewportPosition.y,
-            nextZoom: getNormalizedZoom(newZoom),
-          },
-          state,
-        ),
-        shouldCacheIgnoreZoom: true,
-      }));
-      this.resetShouldCacheIgnoreZoomDebounced();
+      // mouse: the wheel zooms (scroll up = in, down = out)
+      zoomFromWheel();
     },
   );
+
+  // AIXDraw: best-effort mouse-vs-trackpad classification from a wheel event.
+  // The browser exposes no device flag, but the deltas differ reliably: a
+  // trackpad emits fractional and/or horizontal deltas (and pinch as ctrlKey),
+  // while a mouse wheel emits clean integer, purely-vertical deltas. Ambiguous
+  // events default to "mouse" so the zoom power-path is never mistaken for a
+  // pan; a short latch keeps a two-finger gesture's momentum tail on trackpad.
+  // The bottom-left toggle backstops any misclassification.
+  private classifyWheelDevice = (
+    event: WheelEvent | React.WheelEvent<HTMLDivElement | HTMLCanvasElement>,
+  ): "mouse" | "trackpad" => {
+    // line/page granularity (Windows/Linux mice) is never a trackpad
+    if (event.deltaMode !== 0) {
+      return "mouse";
+    }
+    if (
+      event.deltaX !== 0 ||
+      !Number.isInteger(event.deltaY) ||
+      !Number.isInteger(event.deltaX)
+    ) {
+      this.lastTrackpadWheelTimestamp = Date.now();
+      return "trackpad";
+    }
+    // clean integer, purely-vertical delta: a mouse wheel notch — unless we're
+    // still inside a two-finger gesture whose momentum can briefly report so
+    if (Date.now() - this.lastTrackpadWheelTimestamp < 400) {
+      return "trackpad";
+    }
+    return "mouse";
+  };
 
   private getTextWysiwygSnappedToCenterPosition(
     x: number,
