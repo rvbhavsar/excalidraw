@@ -123,12 +123,14 @@ import {
 
 import { loadFilesFromFirebase } from "./data/firebase";
 import {
+  coreAccessDeniedAtom,
   currentDrawingIdAtom,
   getDrawing,
   saveDrawing,
 } from "./data/backend";
 import { DashboardPage } from "./dashboard/DashboardPage";
 import { AixFilesSidebar } from "./components/AixFilesSidebar";
+import { CoreAccessDenied } from "./components/CoreAccessDenied";
 import {
   LibraryIndexedDBAdapter,
   LibraryLocalStorageMigrationAdapter,
@@ -1396,6 +1398,7 @@ const ExcalidrawApp = () => {
  * direct drawing links (/d/:id), collab links, and signed-out visitors. */
 const RootView = ({ canvas }: { canvas: React.ReactNode }) => {
   const { isLoaded, isSignedIn } = useAuth();
+  const coreAccessDenied = useAtomValue(coreAccessDeniedAtom);
   const [pathname, setPathname] = useState(window.location.pathname);
 
   useEffect(() => {
@@ -1414,6 +1417,9 @@ const RootView = ({ canvas }: { canvas: React.ReactNode }) => {
     }
   }, [isLoaded, isSignedIn, isBareRoot]);
 
+  if (coreAccessDenied) {
+    return <CoreAccessDenied />;
+  }
   if (pathname === "/dashboard") {
     return <DashboardPage />;
   }

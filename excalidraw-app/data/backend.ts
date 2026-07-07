@@ -5,7 +5,7 @@ import type { AppState, BinaryFiles } from "@excalidraw/excalidraw/types";
 
 import type { Socket } from "socket.io-client";
 
-import { atom } from "../app-jotai";
+import { atom, appJotaiStore } from "../app-jotai";
 
 import type { SyncableExcalidrawElement } from ".";
 
@@ -15,6 +15,11 @@ const API_URL = import.meta.env.VITE_APP_API_URL as string;
  * used by App.tsx's onChange to autosave to the backend instead of/alongside
  * localStorage once a signed-in user has a drawing open */
 export const currentDrawingIdAtom = atom<string | null>(null);
+
+/** flips true when the backend answers 403 no_agent_access: the signed-in
+ * user's org doesn't have AIXDraw enabled in AIX Core, or the user isn't
+ * assigned. RootView renders a blocking screen instead of the app. */
+export const coreAccessDeniedAtom = atom(false);
 
 declare global {
   interface Window {
@@ -72,6 +77,15 @@ const apiFetch = async (path: string, init: RequestInit = {}) => {
   });
   if (!response.ok) {
     const body = await response.text();
+    if (response.status === 403) {
+      try {
+        if (JSON.parse(body)?.detail?.error === "no_agent_access") {
+          appJotaiStore.set(coreAccessDeniedAtom, true);
+        }
+      } catch {
+        // non-JSON 403 body, fall through to the generic error
+      }
+    }
     throw new Error(`API ${path} failed (${response.status}): ${body}`);
   }
   return response.json();

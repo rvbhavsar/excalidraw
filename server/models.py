@@ -95,7 +95,7 @@ class RoomMember(Base):
 
 class PendingInvite(Base):
     """An invite by email for someone who hasn't signed up yet. Converted into
-    a RoomMember automatically the first time they sign in (see webhooks.py)."""
+    a RoomMember automatically the first time they sign in (see auth._ensure_user_exists)."""
 
     __tablename__ = "pending_invites"
 
