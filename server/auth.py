@@ -8,8 +8,9 @@ from fastapi import Depends, Header, HTTPException
 from jwt import PyJWKClient
 from sqlalchemy.orm import Session
 
+from core_access import check_core_access, socket_has_access
 from db import get_db
-from models import User
+from models import PendingInvite, RoomMember, User
 
 CLERK_JWKS_URL = os.environ["CLERK_JWKS_URL"]
 CLERK_SECRET_KEY = os.environ["CLERK_SECRET_KEY"]
@@ -49,10 +50,10 @@ def _extract_token(authorization: str | None) -> str | None:
 
 
 async def _ensure_user_exists(db: Session, user_id: str) -> None:
-    """Self-heals the `users` row for accounts that signed up before the
-    Clerk webhook was wired up (or if a webhook delivery was ever missed).
-    Without this, any endpoint that writes owner_id/user_id as a foreign key
-    fails for those accounts."""
+    """JIT-mirrors the `users` row on a user's first authed request (the
+    platform pattern: agent apps do NOT subscribe to Clerk webhooks; Core
+    owns the only webhook subscription). Without this, any endpoint that
+    writes owner_id/user_id as a foreign key fails for new accounts."""
     if db.get(User, user_id):
         return
     async with httpx.AsyncClient() as client:
@@ -68,14 +69,35 @@ async def _ensure_user_exists(db: Session, user_id: str) -> None:
         (e["email_address"] for e in emails if e.get("id") == data.get("primary_email_address_id")),
         emails[0]["email_address"] if emails else None,
     )
+    email = primary_email.strip().lower() if primary_email else None
     db.add(
         User(
             id=user_id,
-            email=primary_email.strip().lower() if primary_email else None,
+            email=email,
             username=data.get("username") or data.get("first_name"),
             avatar_url=data.get("image_url"),
         )
     )
+    # convert any pending-by-email invites into real room memberships —
+    # this used to happen in the Clerk user.created webhook; the JIT create
+    # IS the "user just appeared" moment now
+    if email:
+        for invite in db.query(PendingInvite).filter(PendingInvite.email == email).all():
+            existing = (
+                db.query(RoomMember)
+                .filter(
+                    RoomMember.drawing_id == invite.drawing_id,
+                    RoomMember.user_id == user_id,
+                )
+                .first()
+            )
+            if not existing:
+                db.add(
+                    RoomMember(
+                        drawing_id=invite.drawing_id, user_id=user_id, role=invite.role
+                    )
+                )
+            db.delete(invite)
     db.commit()
 
 
@@ -91,6 +113,7 @@ async def get_current_user_id(
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
     user_id = claims["sub"]
+    await check_core_access(user_id, token)  # entitlement gate, fail-closed
     await _ensure_user_exists(db, user_id)
     return user_id
 
@@ -123,6 +146,7 @@ async def get_current_context(
     except jwt.PyJWTError as exc:
         raise HTTPException(status_code=401, detail=f"Invalid token: {exc}") from exc
     user_id = claims["sub"]
+    await check_core_access(user_id, token)  # entitlement gate, fail-closed
     await _ensure_user_exists(db, user_id)
     return AuthContext(user_id=user_id, org_id=_extract_org_id(claims))
 
@@ -181,5 +205,7 @@ async def verify_socket_token(token: str | None, db: Session) -> str | None:
         user_id = _decode(token)["sub"]
     except jwt.PyJWTError:
         return None
+    if not await socket_has_access(user_id, token):
+        return None  # connect handler refuses unauthenticated connections
     await _ensure_user_exists(db, user_id)
     return user_id
