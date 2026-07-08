@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from db import Base, engine
 import models  # noqa: F401  (ensures models are registered before create_all)
-from routers import collections, drawings
+from routers import collections, drawings, shared_scenes
 from sockets import sio
 
 Base.metadata.create_all(bind=engine)
@@ -47,6 +47,7 @@ app.add_middleware(
 
 app.include_router(drawings.router)
 app.include_router(collections.router)
+app.include_router(shared_scenes.router)
 # Clerk webhooks removed on purpose: platform rule is that Core owns the only
 # Clerk webhook subscription; agent apps JIT-mirror on first authed request
 # (see auth._ensure_user_exists) gated by the Core /access check.
