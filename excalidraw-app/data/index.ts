@@ -57,8 +57,22 @@ export const getSyncableElements = (
     isSyncableElement(element),
   ) as SyncableExcalidrawElement[];
 
-const BACKEND_V2_GET = import.meta.env.VITE_APP_BACKEND_V2_GET_URL;
-const BACKEND_V2_POST = import.meta.env.VITE_APP_BACKEND_V2_POST_URL;
+// Share-link snapshots are served by our own backend (server/routers/
+// shared_scenes.py), so derive the URLs from VITE_APP_API_URL — which is
+// correct per environment — instead of hardcoding per-env values in .env
+// files. Checked-in .env.production values beat Railway service vars in
+// this Vite setup, so a hardcoded URL there silently pointed staging
+// builds at the prod API. The BACKEND_V2_* envs remain as explicit
+// overrides only (e.g. local dev against a different snapshot host).
+const SHARE_API_BASE = (import.meta.env.VITE_APP_API_URL as string).replace(
+  /\/$/,
+  "",
+);
+const BACKEND_V2_GET =
+  import.meta.env.VITE_APP_BACKEND_V2_GET_URL || `${SHARE_API_BASE}/api/v2/`;
+const BACKEND_V2_POST =
+  import.meta.env.VITE_APP_BACKEND_V2_POST_URL ||
+  `${SHARE_API_BASE}/api/v2/post/`;
 
 export type EncryptedData = {
   data: ArrayBuffer;
