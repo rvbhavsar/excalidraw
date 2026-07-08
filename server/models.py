@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import ForeignKey, String, Boolean, Integer, JSON
+from sqlalchemy import ForeignKey, String, Boolean, Integer, JSON, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -78,6 +78,19 @@ class Drawing(Base):
     pending_invites: Mapped[list["PendingInvite"]] = relationship(
         back_populates="drawing", cascade="all, delete-orphan"
     )
+
+
+class SharedScene(Base):
+    """An anonymous, read-only "Export to Link" snapshot. The body is an
+    end-to-end encrypted, compressed blob produced by the client; the decryption
+    key never reaches us (it lives in the link's URL hash). No owner and no auth:
+    anyone with the link can read it, which is the whole point of a share link."""
+
+    __tablename__ = "shared_scenes"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
 class RoomMember(Base):
