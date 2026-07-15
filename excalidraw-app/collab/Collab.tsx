@@ -62,6 +62,7 @@ import {
 import { getSyncableElements } from "../data";
 import {
   createDrawing,
+  currentDrawingIdAtom,
   getAuthToken,
   getDrawing,
   isSavedToBackend,
@@ -440,10 +441,18 @@ class Collab extends PureComponent<CollabProps, CollabState> {
       ({ roomId } = existingRoomLinkData);
     } else {
       // starting a fresh session requires the current scene to already be a
-      // saved drawing (drawing.id doubles as the room id / membership scope)
-      const drawing = await createDrawing();
-      roomId = drawing.id;
-      window.history.pushState({}, APP_NAME, `${window.location.origin}${window.location.pathname}#room=${roomId}`);
+      // saved drawing (drawing.id doubles as the room id / membership scope).
+      // Room on the drawing that's actually open — creating a new one here
+      // would fork the session into a stray record, so every collab save (and
+      // every teammate's edit) would land there instead of in the drawing the
+      // host is looking at. Only unsaved scratch scenes need a new record.
+      const openDrawingId = appJotaiStore.get(currentDrawingIdAtom);
+      roomId = openDrawingId ?? (await createDrawing()).id;
+      window.history.pushState(
+        {},
+        APP_NAME,
+        `${window.location.origin}${window.location.pathname}#room=${roomId}`,
+      );
     }
 
     // TODO: `ImportedDataState` type here seems abused
