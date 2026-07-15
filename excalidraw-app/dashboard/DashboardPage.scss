@@ -279,6 +279,20 @@ $hover: #f4f4f7;
     transform: translateY(-2px);
   }
 
+  // the hover `transform` above makes every card its own stacking context, which
+  // traps the ⋯ menu's z-index inside its own card — later cards then paint over
+  // the menu, swallowing the clicks meant for it (and hover-shifting under the
+  // cursor). Raising the whole card while its menu is open lifts the menu above
+  // its siblings; freezing the lift keeps the menu still under the pointer.
+  &--menu-open {
+    position: relative;
+    z-index: 30;
+
+    &:hover {
+      transform: none;
+    }
+  }
+
   &__thumb {
     position: relative;
     display: flex;

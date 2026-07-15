@@ -7,6 +7,7 @@ import {
   useOrganization,
   useUser,
 } from "@clerk/clerk-react";
+import clsx from "clsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -72,7 +73,10 @@ const DrawingCard = ({
       return;
     }
     const onDown = (event: MouseEvent) => {
-      if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
+      if (
+        actionsRef.current &&
+        !actionsRef.current.contains(event.target as Node)
+      ) {
         setMenuOpen(false);
       }
     };
@@ -92,7 +96,7 @@ const DrawingCard = ({
   };
 
   return (
-    <div className="aix-card">
+    <div className={clsx("aix-card", { "aix-card--menu-open": menuOpen })}>
       <button
         className="aix-card__thumb"
         onClick={() => openDrawing(drawing.id)}
@@ -103,7 +107,9 @@ const DrawingCard = ({
         }
       >
         {!drawing.thumbnail && <img src={LOGO_LIGHT} alt="" aria-hidden />}
-        <span className="aix-card__age">{relativeTime(drawing.updated_at)}</span>
+        <span className="aix-card__age">
+          {relativeTime(drawing.updated_at)}
+        </span>
       </button>
       <div className="aix-card__meta">
         <div className="aix-card__info">
