@@ -10,28 +10,46 @@ sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 _connections: dict[str, dict] = {}
 
 
-async def _has_access(drawing_id: str, user_id: str) -> bool:
+# subtypes that only describe where a user is looking/pointing. They carry no
+# scene mutation, so a viewer may broadcast them; anything else is an edit.
+_PRESENCE_SUBTYPES = {"MOUSE_LOCATION", "IDLE_STATUS", "USER_VISIBLE_SCENE_BOUNDS"}
+
+
+async def _role_for_room(drawing_id: str, user_id: str) -> str | None:
+    """Same access set as GET /api/drawings/{id}, but keeps the *role* — the REST
+    layer blocks viewers from PUT, so the socket has to block them too or
+    read-only sharing isn't read-only."""
     db = SessionLocal()
     try:
         drawing = db.get(Drawing, drawing_id)
         if not drawing:
-            return False
+            return None
         if drawing.owner_id == user_id:
-            return True
+            return "owner"
         member = (
             db.query(RoomMember)
             .filter(RoomMember.drawing_id == drawing_id, RoomMember.user_id == user_id)
             .first()
         )
         if member is not None:
-            return True
+            return member.role
         if drawing.workspace_id is not None:
             workspace = db.get(Workspace, drawing.workspace_id)
             if workspace and workspace.clerk_org_id in await get_user_org_ids(user_id):
-                return True
-        return False
+                return "editor"
+        return None
     finally:
         db.close()
+
+
+def _may_broadcast(role: str | None, payload) -> bool:
+    if role in ("owner", "editor"):
+        return True
+    # both broadcast channels land on the same `client-broadcast` handler, and the
+    # client dispatches on payload["type"] regardless of which one carried it — so
+    # a viewer restricted on one channel could just mutate the scene over the other.
+    subtype = payload.get("type") if isinstance(payload, dict) else None
+    return subtype in _PRESENCE_SUBTYPES
 
 
 @sio.event
@@ -44,7 +62,7 @@ async def connect(sid, environ, auth):
         db.close()
     if not user_id:
         raise socketio.exceptions.ConnectionRefusedError("Invalid or missing auth token")
-    _connections[sid] = {"user_id": user_id, "room_id": None, "username": (auth or {}).get("username", "Anonymous")}
+    _connections[sid] = {"user_id": user_id, "room_id": None, "role": None, "username": (auth or {}).get("username", "Anonymous")}
 
 
 @sio.event
@@ -72,12 +90,14 @@ async def join_room(sid, room_id):
     conn = _connections.get(sid)
     if not conn:
         return
-    if not await _has_access(room_id, conn["user_id"]):
+    role = await _role_for_room(room_id, conn["user_id"])
+    if role is None:
         await sio.emit("error", {"message": "Not authorized for this room"}, to=sid)
         return
 
     existing_in_room = _roster(room_id)
     conn["room_id"] = room_id
+    conn["role"] = role
     await sio.enter_room(sid, room_id)
 
     if existing_in_room:
@@ -93,6 +113,8 @@ async def server_broadcast(sid, room_id, payload, iv=None):
     conn = _connections.get(sid)
     if not conn or conn["room_id"] != room_id:
         return
+    if not _may_broadcast(conn.get("role"), payload):
+        return
     await sio.emit("client-broadcast", payload, room=room_id, skip_sid=sid)
 
 
@@ -101,9 +123,18 @@ async def server_volatile_broadcast(sid, room_id, payload, iv=None):
     conn = _connections.get(sid)
     if not conn or conn["room_id"] != room_id:
         return
+    if not _may_broadcast(conn.get("role"), payload):
+        return
     await sio.emit("client-broadcast", payload, room=room_id, skip_sid=sid)
 
 
 @sio.on("user-follow")
 async def user_follow(sid, payload):
-    await sio.emit("user-follow-room-change", payload, skip_sid=sid)
+    # without room=, this fanned out to every connected client on the server —
+    # i.e. across every customer — rather than to the sender's own room.
+    conn = _connections.get(sid)
+    if not conn or not conn["room_id"]:
+        return
+    await sio.emit(
+        "user-follow-room-change", payload, room=conn["room_id"], skip_sid=sid
+    )
