@@ -686,10 +686,20 @@ const ExcalidrawWrapper = () => {
           const localDataState = importFromLocalStorage();
           const username = importUsernameFromLocalStorage();
           setLangCode(getPreferredLanguage());
-          excalidrawAPI.updateScene({
-            ...localDataState,
-            captureUpdate: CaptureUpdateAction.NEVER,
-          });
+          // the localStorage scene lives under one global key shared by every
+          // drawing, so it holds whichever drawing was last touched in any tab
+          // — not necessarily this one. Blitting it into a backend-backed
+          // drawing would replace its canvas *and* its appState.name, which the
+          // autosave then writes back as drawing.title, overwriting this
+          // drawing with a copy of another one. The backend is the source of
+          // truth whenever a drawing is open; only the local (signed-out /
+          // scratch) scene may be restored from browser storage.
+          if (!appJotaiStore.get(currentDrawingIdAtom)) {
+            excalidrawAPI.updateScene({
+              ...localDataState,
+              captureUpdate: CaptureUpdateAction.NEVER,
+            });
+          }
           LibraryIndexedDBAdapter.load().then((data) => {
             if (data) {
               excalidrawAPI.updateLibrary({
