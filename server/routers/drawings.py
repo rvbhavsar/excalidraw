@@ -234,9 +234,6 @@ async def save_drawing(
     drawing, role = await _get_drawing_or_404(db, drawing_id, ctx.user_id)
     if role not in ("owner", "editor"):
         raise HTTPException(status_code=403, detail="Read-only access")
-    if body.scene_version < drawing.scene_version:
-        # stale write, return current authoritative state instead of overwriting
-        return _out(drawing, role)
     if body.title is not None:
         drawing.title = body.title
     if body.thumbnail is not None:
@@ -244,7 +241,14 @@ async def save_drawing(
     drawing.elements = body.elements
     drawing.app_state = body.app_state
     drawing.files = {**drawing.files, **body.files}
-    drawing.scene_version = body.scene_version
+    # server-assigned and monotonic. `body.scene_version` is a *sum* of element
+    # versions, which drops whenever an element leaves the syncable set — most
+    # commonly when a deleted element's tombstone ages out after 24h. Comparing
+    # it against the stored value rejected perfectly good writes (returning 200
+    # with the old row, so the client never noticed) and silently lost the
+    # session's work on the next reload. It also failed at the one job it had:
+    # a foreign scene's larger sum sailed straight past the guard.
+    drawing.scene_version = drawing.scene_version + 1
     db.commit()
     db.refresh(drawing)
     return _out(drawing, role)

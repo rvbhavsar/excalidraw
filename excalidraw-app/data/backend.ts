@@ -220,9 +220,13 @@ export const renameCollection = (
 export const deleteCollection = (id: string): Promise<void> =>
   apiFetch(`/api/collections/${id}`, { method: "DELETE" });
 
-// in-memory cache of the last scene_version we saved, per drawing id,
-// mirroring FirebaseSceneVersionCache's purpose of skipping redundant saves
-const SceneVersionCache = new Map<string, number>();
+// element-version sum of the last payload we successfully saved, per drawing id,
+// mirroring FirebaseSceneVersionCache's purpose of skipping redundant saves.
+// NOTE: this deliberately tracks the *local* sum, not the drawing's
+// `scene_version` — that column is a server-assigned monotonic counter, so
+// comparing it to a sum of element versions would never match and would leave
+// every drawing looking permanently unsaved.
+const LastSavedElementsVersion = new Map<string, number>();
 
 export const isSavedToBackend = (
   drawingId: string | null,
@@ -231,8 +235,8 @@ export const isSavedToBackend = (
   if (!drawingId) {
     return true;
   }
-  const cached = SceneVersionCache.get(drawingId);
-  return cached !== undefined && cached === getVersion(elements);
+  const saved = LastSavedElementsVersion.get(drawingId);
+  return saved !== undefined && saved === getVersion(elements);
 };
 
 const getVersion = (elements: readonly OrderedExcalidrawElement[]) =>
@@ -255,6 +259,8 @@ export const saveDrawing = async (
       // `collaborators` to {}, which crashes on reload (.forEach is not a fn).
       app_state: clearAppStateForDatabase(appState),
       files,
+      // ignored by the server (it owns scene_version) but still sent so a
+      // frontend that rolls ahead of the API keeps working against the old one
       scene_version: sceneVersion,
       // keep the dashboard's drawing.title in sync with the scene name that
       // Excalidraw's built-in "Rename scene" edits (appState.name)
@@ -262,7 +268,7 @@ export const saveDrawing = async (
       ...(thumbnail ? { thumbnail } : {}),
     }),
   });
-  SceneVersionCache.set(drawingId, result.scene_version);
+  LastSavedElementsVersion.set(drawingId, sceneVersion);
   return result;
 };
 
